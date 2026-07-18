@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>/fpeds — Sign Up</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link rel="stylesheet" href="/css/auth.css"/>
+  <link rel="icon" type="image/svg+xml" href="/img/favicon.svg"/>
+</head>
+<body class="auth-body">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="brand-slash">/</span><span class="brand-name">fpeds</span>
+      </div>
+      <h2 class="auth-title">Create Account</h2>
+      <p class="auth-sub">Get access to all tools</p>
+
+      <div id="auth-error" class="auth-alert hidden"></div>
+      <div id="auth-success" class="auth-alert auth-alert-ok hidden"></div>
+
+      <form id="signup-form" class="auth-form" autocomplete="off">
+        <div class="auth-field">
+          <label class="auth-label">Username</label>
+          <input id="f-username" type="text" class="auth-input" placeholder="your_username" autocomplete="off" spellcheck="false" maxlength="30"/>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Email</label>
+          <input id="f-email" type="email" class="auth-input" placeholder="you@example.com" autocomplete="off"/>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Password</label>
+          <div class="auth-input-wrap">
+            <input id="f-password" type="password" class="auth-input" placeholder="Min. 6 characters" autocomplete="new-password"/>
+            <button type="button" class="eye-btn" id="eye-btn">show</button>
+          </div>
+          <div class="password-strength" id="pw-strength"></div>
+        </div>
+        <button type="submit" class="auth-btn" id="signup-btn">Create Account</button>
+      </form>
+
+      <p class="auth-switch">Already have an account? <a href="/fpeds/login">Sign in</a></p>
+    </div>
+    <div class="auth-footer">
+      <span>⬡ fpeds v1.3</span>
+    </div>
+  </div>
+  <script src="/js/auth.js"></script>
+</body>
+</html>

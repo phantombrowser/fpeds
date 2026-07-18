@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>/fpeds — Sign In</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link rel="stylesheet" href="/css/auth.css"/>
+  <link rel="icon" type="image/svg+xml" href="/img/favicon.svg"/>
+</head>
+<body class="auth-body">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="brand-slash">/</span><span class="brand-name">fpeds</span>
+      </div>
+      <h2 class="auth-title">Sign In</h2>
+      <p class="auth-sub">Welcome back</p>
+
+      <div id="auth-error" class="auth-alert hidden"></div>
+
+      <form id="login-form" class="auth-form" autocomplete="off">
+        <div class="auth-field">
+          <label class="auth-label">Username</label>
+          <input id="f-username" type="text" class="auth-input" placeholder="your_username" autocomplete="off" spellcheck="false"/>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Password</label>
+          <div class="auth-input-wrap">
+            <input id="f-password" type="password" class="auth-input" placeholder="••••••••" autocomplete="current-password"/>
+            <button type="button" class="eye-btn" id="eye-btn">show</button>
+          </div>
+        </div>
+        <button type="submit" class="auth-btn" id="login-btn">Sign In</button>
+      </form>
+
+      <p class="auth-switch">No account? <a href="/fpeds/signup">Sign up</a></p>
+    </div>
+    <div class="auth-footer">
+      <span>⬡ fpeds v1.3</span>
+    </div>
+  </div>
+  <script src="/js/auth.js"></script>
+</body>
+</html>
