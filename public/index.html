@@ -36,28 +36,41 @@
       <section id="tab-check" class="tab-panel active">
         <div class="panel-header">
           <h1>Link Checker</h1>
-          <p class="subtitle">Verify if a URL is active — supports clearnet &amp; .onion addresses</p>
+          <p class="subtitle">Paste one or many URLs — space, newline, or comma separated. Supports clearnet &amp; .onion</p>
         </div>
 
         <div class="check-form">
-          <div class="input-row">
-            <input
+          <div class="textarea-row">
+            <textarea
               id="url-input"
-              type="text"
-              placeholder="https://example.com  or  http://example.onion"
+              placeholder="https://example.com https://another.com&#10;http://example.onion&#10;Paste multiple URLs separated by spaces, newlines, or commas..."
               autocomplete="off"
               spellcheck="false"
-            />
-            <button id="check-btn" class="btn-primary">Check</button>
+              rows="4"
+            ></textarea>
           </div>
-          <div class="input-hints">
-            <span class="hint-tag">HTTP</span>
-            <span class="hint-tag">HTTPS</span>
-            <span class="hint-tag onion">.onion</span>
+          <div class="check-controls">
+            <div class="input-hints">
+              <span class="hint-tag">HTTP</span>
+              <span class="hint-tag">HTTPS</span>
+              <span class="hint-tag onion">.onion</span>
+              <span class="hint-tag">Bulk paste</span>
+            </div>
+            <div class="check-btn-row">
+              <span id="check-count-label" class="check-count-label"></span>
+              <button id="check-btn" class="btn-primary">Check</button>
+            </div>
           </div>
         </div>
 
-        <div id="check-result" class="result-box hidden"></div>
+        <div id="check-results-wrap" class="check-results-wrap hidden">
+          <div class="results-header">
+            <span class="results-title">Results</span>
+            <div class="results-summary" id="results-summary"></div>
+            <button id="clear-results" class="btn-ghost">Clear</button>
+          </div>
+          <div id="check-results-list" class="check-results-list"></div>
+        </div>
 
         <div id="check-history" class="history-section">
           <div class="history-header">
@@ -81,10 +94,18 @@
           <button id="search-btn" class="btn-primary">
             <span id="search-btn-label">Start Scan</span>
           </button>
-          <button id="stop-btn" class="btn-ghost hidden">Stop</button>
+          <button id="stop-btn" class="btn-danger hidden">Stop</button>
+          <label class="infinity-toggle" title="Keep scanning in a loop until manually stopped">
+            <input type="checkbox" id="infinity-mode" />
+            <span class="infinity-track">
+              <span class="infinity-thumb"></span>
+            </span>
+            <span class="infinity-label">∞ Infinity</span>
+          </label>
           <div id="search-stats" class="search-stats hidden">
             <span id="stat-queries">0/50</span> queries &nbsp;·&nbsp;
             <span id="stat-links">0</span> links found
+            &nbsp;·&nbsp; pass <span id="stat-pass">1</span>
           </div>
         </div>
 

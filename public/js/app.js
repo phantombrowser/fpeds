@@ -16,51 +16,11 @@
     });
   });
 
-  /* ═══════════════════════════════════════════
-     CHECK TAB
-  ═══════════════════════════════════════════ */
-  const urlInput    = document.getElementById('url-input');
-  const checkBtn    = document.getElementById('check-btn');
-  const resultBox   = document.getElementById('check-result');
-  const historyList = document.getElementById('history-list');
-  const clearHistBtn= document.getElementById('clear-history');
-
-  let checkHistory = JSON.parse(localStorage.getItem('fpeds_history') || '[]');
-
-  function saveHistory() {
-    localStorage.setItem('fpeds_history', JSON.stringify(checkHistory.slice(0, 40)));
-  }
-
-  function renderHistory() {
-    if (checkHistory.length === 0) {
-      historyList.innerHTML = '<div class="history-empty">No checks yet.</div>';
-      return;
-    }
-    historyList.innerHTML = checkHistory.map((item, i) => {
-      const cls = statusClass(item.status);
-      const code = item.httpCode ? `<span class="history-code">${item.httpCode}</span>` : '';
-      return `
-        <div class="history-item" data-index="${i}">
-          <span class="history-status ${cls}"></span>
-          <span class="history-url" title="${escHtml(item.url)}">${escHtml(item.url)}</span>
-          ${code}
-        </div>`;
-    }).join('');
-
-    historyList.querySelectorAll('.history-item').forEach(el => {
-      el.addEventListener('click', () => {
-        urlInput.value = checkHistory[el.dataset.index].url;
-        runCheck();
-      });
-    });
-  }
-
-  function statusClass(status) {
-    if (status === 'active')        return 'hs-active';
-    if (status === 'inactive')      return 'hs-inactive';
-    if (status === 'dead')          return 'hs-dead';
-    if (status === 'tor_unavailable') return 'hs-tor';
-    return 'hs-error';
+  /* ── Helpers ── */
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   function httpCodeClass(code) {
@@ -71,123 +31,184 @@
     return 'code-5xx';
   }
 
-  function escHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  function statusMeta(status) {
+    return {
+      active:          { label: 'ACTIVE',       cls: 'badge-active',   dotCls: 's-active'   },
+      inactive:        { label: 'INACTIVE',      cls: 'badge-inactive', dotCls: 's-inactive' },
+      dead:            { label: 'DEAD',          cls: 'badge-dead',     dotCls: 's-dead'     },
+      tor_unavailable: { label: 'TOR REQ',       cls: 'badge-tor',      dotCls: 's-tor'      },
+      error:           { label: 'ERROR',         cls: 'badge-error',    dotCls: 's-dead'     },
+    }[status] || { label: 'UNKNOWN', cls: 'badge-error', dotCls: 's-dead' };
   }
 
-  function showLoading() {
-    resultBox.classList.remove('hidden');
-    resultBox.innerHTML = `
-      <div class="result-box loading">
-        <div class="loader">
-          <span>Connecting</span>
-          <span class="loader-dots">
-            <span></span><span></span><span></span>
-          </span>
-        </div>
+  function parseUrls(raw) {
+    // Split by whitespace, commas, newlines — dedupe
+    const tokens = raw.split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
+    return [...new Set(tokens)].map(u => /^https?:\/\//i.test(u) ? u : 'http://' + u);
+  }
+
+  /* ═══════════════════════════════════════════
+     CHECK TAB
+  ═══════════════════════════════════════════ */
+  const urlInput       = document.getElementById('url-input');
+  const checkBtn       = document.getElementById('check-btn');
+  const checkCountLbl  = document.getElementById('check-count-label');
+  const resultsWrap    = document.getElementById('check-results-wrap');
+  const resultsList    = document.getElementById('check-results-list');
+  const resultsSummary = document.getElementById('results-summary');
+  const clearResultsBtn= document.getElementById('clear-results');
+  const historyList    = document.getElementById('history-list');
+  const clearHistBtn   = document.getElementById('clear-history');
+
+  let checkHistory = JSON.parse(localStorage.getItem('fpeds_history') || '[]');
+
+  /* Live URL count while typing */
+  urlInput.addEventListener('input', () => {
+    const urls = parseUrls(urlInput.value);
+    checkCountLbl.textContent = urls.length > 0 ? `${urls.length} URL${urls.length > 1 ? 's' : ''}` : '';
+  });
+
+  /* ── History ── */
+  function saveHistory() {
+    localStorage.setItem('fpeds_history', JSON.stringify(checkHistory.slice(0, 60)));
+  }
+
+  function renderHistory() {
+    if (checkHistory.length === 0) {
+      historyList.innerHTML = '<div class="history-empty">No checks yet.</div>';
+      return;
+    }
+    historyList.innerHTML = checkHistory.map((item, i) => {
+      const m = statusMeta(item.status);
+      const code = item.httpCode ? `<span class="history-code">${item.httpCode}</span>` : '';
+      return `<div class="history-item" data-index="${i}">
+        <span class="history-status ${m.dotCls.replace('s-', 'hs-')}"></span>
+        <span class="history-url" title="${escHtml(item.url)}">${escHtml(item.url)}</span>
+        ${code}
       </div>`;
+    }).join('');
+
+    historyList.querySelectorAll('.history-item').forEach(el => {
+      el.addEventListener('click', () => {
+        urlInput.value = checkHistory[el.dataset.index].url;
+        urlInput.dispatchEvent(new Event('input'));
+        runCheck();
+      });
+    });
   }
 
-  function badgeHtml(status) {
-    const map = {
-      active:          ['badge-active',   'ACTIVE'],
-      inactive:        ['badge-inactive', 'INACTIVE'],
-      dead:            ['badge-dead',     'DEAD'],
-      tor_unavailable: ['badge-tor',      'TOR REQUIRED'],
-      error:           ['badge-error',    'ERROR'],
-    };
-    const [cls, label] = map[status] || ['badge-error', 'UNKNOWN'];
-    return `<span class="status-badge ${cls}">${label}</span>`;
+  /* ── Render a single result row ── */
+  function createResultRow(data, pending = false) {
+    const item = document.createElement('div');
+    item.className = 'check-result-item';
+    item.dataset.url = data.url;
+
+    if (pending) {
+      item.innerHTML = `
+        <span class="cri-status s-pending"></span>
+        <span class="cri-badge" style="color:var(--text-dimmer);border:1px solid var(--border)">PENDING</span>
+        <span class="cri-code"></span>
+        <span class="cri-url">${escHtml(data.url)}</span>
+        <span class="cri-time"></span>`;
+      return item;
+    }
+
+    const m = statusMeta(data.status);
+    const codeHtml = data.httpCode
+      ? `<span class="cri-code ${httpCodeClass(data.httpCode)}">${data.httpCode}</span>`
+      : `<span class="cri-code"></span>`;
+    const timeHtml = data.responseTime !== undefined
+      ? `<span class="cri-time">${data.responseTime}ms</span>`
+      : `<span class="cri-time"></span>`;
+    const onionHtml = data.isOnion ? `<span class="cri-onion">.onion</span>` : '';
+
+    item.innerHTML = `
+      <span class="cri-status ${m.dotCls}"></span>
+      <span class="cri-badge ${m.cls}">${m.label}</span>
+      ${codeHtml}
+      <span class="cri-url">${onionHtml}<a href="${escHtml(data.url)}" target="_blank" rel="noopener">${escHtml(data.url)}</a></span>
+      ${timeHtml}`;
+    return item;
   }
 
-  function showResult(data) {
-    const isOnionBadge = data.isOnion
-      ? `<span class="hint-tag onion" style="margin-left:8px">.onion</span>` : '';
-
-    let rows = '';
-
-    rows += row('Status', badgeHtml(data.status) + isOnionBadge);
-
-    if (data.httpCode) {
-      const cc = httpCodeClass(data.httpCode);
-      rows += row('HTTP Code', `<span class="http-code ${cc}">${data.httpCode}</span>`);
-    }
-
-    rows += row('URL', `<a href="${escHtml(data.url)}" target="_blank" rel="noopener" style="color:var(--text-dim)">${escHtml(data.url)}</a>`);
-
-    if (data.responseTime !== undefined) {
-      rows += row('Response Time', data.responseTime + ' ms');
-    }
-
-    if (data.contentType && data.contentType !== 'unknown') {
-      rows += row('Content-Type', data.contentType);
-    }
-
-    if (data.server && data.server !== 'unknown') {
-      rows += row('Server', data.server);
-    }
-
-    if (data.message) {
-      rows += row('Note', `<span style="color:var(--text-dim)">${escHtml(data.message)}</span>`);
-    }
-
-    resultBox.classList.remove('hidden');
-    resultBox.innerHTML = rows;
+  /* ── Update summary bar ── */
+  function updateSummary(results) {
+    const active   = results.filter(r => r.status === 'active').length;
+    const inactive = results.filter(r => r.status === 'inactive').length;
+    const dead     = results.filter(r => ['dead','error','tor_unavailable'].includes(r.status)).length;
+    resultsSummary.innerHTML = `
+      <span class="sum-item"><span class="sum-dot green"></span><span style="color:var(--green)">${active}</span></span>
+      <span class="sum-item"><span class="sum-dot yellow"></span><span style="color:var(--yellow)">${inactive}</span></span>
+      <span class="sum-item"><span class="sum-dot red"></span><span style="color:var(--red)">${dead}</span></span>`;
   }
 
-  function row(key, val) {
-    return `<div class="result-row">
-      <span class="result-key">${key}</span>
-      <span class="result-val">${val}</span>
-    </div>`;
-  }
-
+  /* ── Main check runner ── */
   async function runCheck() {
-    let url = urlInput.value.trim();
-    if (!url) return;
-
-    // Auto-prepend protocol if missing
-    if (!/^https?:\/\//i.test(url)) {
-      url = 'http://' + url;
-      urlInput.value = url;
-    }
+    const urls = parseUrls(urlInput.value);
+    if (urls.length === 0) return;
 
     checkBtn.disabled = true;
     checkBtn.textContent = 'Checking…';
-    showLoading();
+    resultsWrap.classList.remove('hidden');
+    resultsList.innerHTML = '';
+    resultsSummary.innerHTML = '';
 
-    try {
-      const resp = await fetch('/fpeds/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-      const data = await resp.json();
-      showResult(data);
+    // Render pending rows immediately
+    const rowMap = {};
+    urls.forEach(url => {
+      const row = createResultRow({ url }, true);
+      resultsList.appendChild(row);
+      rowMap[url] = row;
+    });
 
-      // Add to history
-      checkHistory.unshift({ url: data.url || url, status: data.status, httpCode: data.httpCode });
-      checkHistory = checkHistory.slice(0, 40);
-      saveHistory();
-      renderHistory();
+    // Fire all requests concurrently
+    const results = [];
+    const promises = urls.map(async (url) => {
+      try {
+        const resp = await fetch('/fpeds/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await resp.json();
+        results.push(data);
 
-    } catch (err) {
-      resultBox.classList.remove('hidden');
-      resultBox.innerHTML = row('Error', `<span style="color:var(--red)">Request failed — ${escHtml(err.message)}</span>`);
-    } finally {
-      checkBtn.disabled = false;
-      checkBtn.textContent = 'Check';
-    }
+        // Replace pending row in place
+        const newRow = createResultRow(data);
+        rowMap[url].replaceWith(newRow);
+        rowMap[url] = newRow;
+
+        updateSummary(results);
+
+        // Add to history
+        checkHistory.unshift({ url: data.url || url, status: data.status, httpCode: data.httpCode });
+        checkHistory = checkHistory.slice(0, 60);
+        saveHistory();
+        renderHistory();
+      } catch (err) {
+        const errData = { url, status: 'error', message: err.message };
+        results.push(errData);
+        const newRow = createResultRow(errData);
+        rowMap[url].replaceWith(newRow);
+        rowMap[url] = newRow;
+        updateSummary(results);
+      }
+    });
+
+    await Promise.allSettled(promises);
+    checkBtn.disabled = false;
+    checkBtn.textContent = 'Check';
   }
 
   checkBtn.addEventListener('click', runCheck);
 
   urlInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') runCheck();
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runCheck();
+  });
+
+  clearResultsBtn.addEventListener('click', () => {
+    resultsWrap.classList.add('hidden');
+    resultsList.innerHTML = '';
   });
 
   clearHistBtn.addEventListener('click', () => {
@@ -196,36 +217,42 @@
     renderHistory();
   });
 
-  // Initial render
   renderHistory();
 
 
   /* ═══════════════════════════════════════════
      SEARCH TAB
   ═══════════════════════════════════════════ */
-  const searchBtn       = document.getElementById('search-btn');
-  const searchBtnLabel  = document.getElementById('search-btn-label');
-  const stopBtn         = document.getElementById('stop-btn');
-  const searchStats     = document.getElementById('search-stats');
-  const statQueries     = document.getElementById('stat-queries');
-  const statLinks       = document.getElementById('stat-links');
-  const consoleOutput   = document.getElementById('console-output');
-  const foundSection    = document.getElementById('found-links-section');
-  const foundLinksList  = document.getElementById('found-links-list');
-  const copyAllBtn      = document.getElementById('copy-all-btn');
-  const exportBtn       = document.getElementById('export-btn');
+  const searchBtn      = document.getElementById('search-btn');
+  const searchBtnLabel = document.getElementById('search-btn-label');
+  const stopBtn        = document.getElementById('stop-btn');
+  const infinityCheck  = document.getElementById('infinity-mode');
+  const searchStats    = document.getElementById('search-stats');
+  const statQueries    = document.getElementById('stat-queries');
+  const statLinks      = document.getElementById('stat-links');
+  const statPass       = document.getElementById('stat-pass');
+  const consoleOutput  = document.getElementById('console-output');
+  const foundSection   = document.getElementById('found-links-section');
+  const foundLinksList = document.getElementById('found-links-list');
+  const copyAllBtn     = document.getElementById('copy-all-btn');
+  const exportBtn      = document.getElementById('export-btn');
 
-  let evtSource   = null;
-  let isSearching = false;
-  let foundLinks  = [];
-  let queryCount  = 0;
-  let totalQueries= 50;
+  let evtSource    = null;
+  let isSearching  = false;
+  let foundLinks   = [];
+  let queryCount   = 0;
+  let totalQueries = 50;
+  let passCount    = 1;
 
   function conLine(text, cls) {
     const span = document.createElement('span');
     span.className = 'console-line ' + (cls || 'c-dim');
     span.innerHTML = text;
     consoleOutput.appendChild(span);
+    // Keep max 800 lines for perf
+    while (consoleOutput.children.length > 800) {
+      consoleOutput.removeChild(consoleOutput.firstChild);
+    }
     consoleOutput.scrollTop = consoleOutput.scrollHeight;
   }
 
@@ -234,12 +261,24 @@
     foundLinksList.innerHTML = '';
     foundLinks = [];
     queryCount = 0;
+    passCount  = 1;
     statQueries.textContent = `0/${totalQueries}`;
     statLinks.textContent   = '0';
+    statPass.textContent    = '1';
+  }
+
+  function ts() {
+    const n = new Date();
+    return [n.getHours(), n.getMinutes(), n.getSeconds()]
+      .map(v => String(v).padStart(2, '0')).join(':');
   }
 
   function addFoundLink(url, name) {
+    // Dedupe
+    if (foundLinks.find(l => l.url === url)) return;
     foundLinks.push({ url, name });
+
+    statLinks.textContent = foundLinks.length;
 
     const item = document.createElement('div');
     item.className = 'found-link-item';
@@ -257,16 +296,13 @@
     item.querySelector('.btn-copy-link').addEventListener('click', () => navigator.clipboard.writeText(url).catch(() => {}));
     item.querySelector('.btn-check-link').addEventListener('click', () => {
       urlInput.value = url;
-      // Switch to check tab
+      urlInput.dispatchEvent(new Event('input'));
       document.querySelector('[data-tab="check"]').click();
       runCheck();
     });
 
     foundLinksList.appendChild(item);
-
-    if (foundSection.classList.contains('hidden')) {
-      foundSection.classList.remove('hidden');
-    }
+    foundSection.classList.remove('hidden');
   }
 
   function startSearch() {
@@ -279,42 +315,50 @@
     stopBtn.classList.remove('hidden');
     searchStats.classList.remove('hidden');
 
-    consoleOutput.innerHTML = '';
-    conLine(`[${timestamp()}] Initializing scan engine...`, 'c-init');
+    const infinity = infinityCheck.checked;
+    const url = '/fpeds/search?fast=1' + (infinity ? '&infinity=1' : '');
 
-    evtSource = new EventSource('/fpeds/search');
+    conLine(`[${ts()}] Initializing scan engine${infinity ? ' — ∞ INFINITY MODE' : ''}...`, 'c-init');
+
+    evtSource = new EventSource(url);
 
     evtSource.onmessage = (e) => {
       const data = JSON.parse(e.data);
 
       if (data.type === 'start') {
         totalQueries = data.total || 50;
-        conLine(`[${timestamp()}] ${escHtml(data.message)}`, 'c-init');
-        conLine(`[${timestamp()}] Running ${totalQueries} queries...`, 'c-dim');
+        conLine(`[${ts()}] ${escHtml(data.message)}`, 'c-init');
+      }
+
+      if (data.type === 'pass') {
+        passCount = data.pass;
+        statPass.textContent = passCount;
+        queryCount = 0;
+        conLine(`[${ts()}] ── Pass ${passCount} ──────────────────────────`, 'c-dim');
       }
 
       if (data.type === 'query') {
         queryCount++;
         statQueries.textContent = `${queryCount}/${totalQueries}`;
-        conLine(`[${timestamp()}] ${escHtml(data.message)}`, 'c-query');
+        conLine(`[${ts()}] ${escHtml(data.message)}`, 'c-query');
       }
 
       if (data.type === 'link') {
-        statLinks.textContent = foundLinks.length + 1;
-        conLine(`[${timestamp()}]  ↳ FOUND: <span style="color:var(--green)">${escHtml(data.url)}</span>  <span style="color:var(--text-dimmer)">${escHtml(data.name)}</span>`, 'c-link');
+        conLine(`[${ts()}]  ↳ <span style="color:var(--green)">${escHtml(data.url)}</span>  <span class="c-dim">${escHtml(data.name)}</span>`, 'c-link');
         addFoundLink(data.url, data.name);
       }
 
       if (data.type === 'done') {
-        conLine(`[${timestamp()}] ─────────────────────────────────────────`, 'c-dim');
-        conLine(`[${timestamp()}] ${escHtml(data.message)}`, 'c-done');
-        stopSearch(true);
+        conLine(`[${ts()}] ─────────────────────────────────────────`, 'c-dim');
+        conLine(`[${ts()}] ${escHtml(data.message)}`, 'c-done');
+        if (!infinity) stopSearch(true);
       }
     };
 
     evtSource.onerror = () => {
-      conLine(`[${timestamp()}] Connection error.`, 'c-err');
-      stopSearch(false);
+      if (isSearching) {
+        conLine(`[${ts()}] Stream error — reconnecting...`, 'c-err');
+      }
     };
   }
 
@@ -324,17 +368,7 @@
     searchBtn.disabled = false;
     searchBtnLabel.textContent = 'Start Scan';
     stopBtn.classList.add('hidden');
-    if (!natural) {
-      conLine(`[${timestamp()}] Scan stopped.`, 'c-err');
-    }
-  }
-
-  function timestamp() {
-    const n = new Date();
-    const hh = String(n.getHours()).padStart(2, '0');
-    const mm = String(n.getMinutes()).padStart(2, '0');
-    const ss = String(n.getSeconds()).padStart(2, '0');
-    return `${hh}:${mm}:${ss}`;
+    if (!natural) conLine(`[${ts()}] Scan stopped by user.`, 'c-err');
   }
 
   searchBtn.addEventListener('click', startSearch);
@@ -351,8 +385,8 @@
   exportBtn.addEventListener('click', () => {
     const text = foundLinks.map(l => `${l.name}\t${l.url}`).join('\n');
     const blob = new Blob([text], { type: 'text/plain' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
     a.download = 'fpeds_chatrooms.txt';
     a.click();
     URL.revokeObjectURL(a.href);
