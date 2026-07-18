@@ -148,14 +148,15 @@ app.post('/fpeds/check', requireAuth, async (req, res) => {
    CHATROOM SEARCH  — SSE, fast + infinity
    Per-connection deduplication across passes
 ══════════════════════════════════════════ */
-const CHATROOM_QUERIES = [
-  'random video chat strangers','talk to random people online','omegle alternatives 2024',
+// Base queries — used on every pass
+const CHATROOM_QUERIES_BASE = [
+  'random video chat strangers','talk to random people online','omegle alternatives 2025',
   'chatroulette alternatives','anonymous chat strangers no login','random stranger video chat free',
   'chat with random people no account','stranger chat roulette sites','best omegle alternatives list',
   'random chat like omegle free','text chat with strangers anonymous','video roulette chat sites',
   'stranger text chat rooms online','random chat app web browser','anonymous video call strangers',
   'chatrandom alternatives','emerald chat alternative','chatspin random chat','camsurf alternative chat',
-  'shagle random video chat','random chat site no registration','talk to strangers -omegle site:.com',
+  'shagle random video chat','random chat site no registration','talk to strangers site:.com',
   'yesichat alternative rooms','chat avenue random rooms','wireclub chat alternative',
   'random chat discord servers','tinychat alternative random','bazoocam alternative video',
   'chatgig stranger random','fruzo chat strangers','paltalk random rooms',
@@ -167,9 +168,81 @@ const CHATROOM_QUERIES = [
   'strangercam video chat','randomvideochat alternatives','spinchat random',
   'chatzy random rooms','monkey app alternatives web','hiyak random video chat',
   'talkomatic classic chat','freenode webchat strangers','make new friends chat random',
-  'chatrandom rooms strangers','omegle cc alternative','chat with strangers 2024 free',
-  'live video chat strangers no signup'
+  'chatrandom rooms strangers','omegle cc alternative','chat with strangers 2025 free',
+  'live video chat strangers no signup',
 ];
+
+// Google Dork query templates for chatroom discovery
+const DORK_TEMPLATES = [
+  'site:reddit.com "random chat" stranger',
+  'site:reddit.com "video chat" strangers free',
+  'inurl:chat intitle:"talk to strangers" free',
+  'inurl:chat intitle:"random video" strangers',
+  'site:github.com "random chat" web app strangers',
+  'intitle:"chat rooms" "no registration" 2025',
+  'intitle:"video chat" "no signup" strangers free',
+  'site:producthunt.com "random chat" strangers',
+  'inurl:/chat/room "stranger" OR "random" -login',
+  'site:alternativeto.net "omegle" OR "chatroulette"',
+  'inurl:chat intitle:"anonymous" strangers video',
+  'intitle:"free chat" "strangers" "no account"',
+  'site:slant.co "omegle alternatives"',
+  '"random video chat" site:.io',
+  '"talk to strangers" site:.app',
+  '"chat with strangers" (site:.io OR site:.app OR site:.chat)',
+  'intitle:"live chat" strangers free 2025',
+  'site:alternativeto.net "stranger chat"',
+  '"stranger chat" filetype:html',
+  'inurl:webchat strangers free no login',
+  '"random chat" "no registration" site:.com',
+  'intitle:"video roulette" chat free',
+  '"omegle alternative" site:reddit.com 2024 OR 2025',
+  '"chatroulette alternative" inurl:list',
+  'intitle:"chat with random" "free" "no signup"',
+  '"best random chat sites" 2025',
+  '"top stranger chat" sites list',
+  'intitle:"anonymous chat" free strangers online',
+  '"video chat app" strangers browser free',
+  '"random chat" "cam to cam" free site:.com',
+  '"gay random chat" strangers free',
+  '"teen random chat" strangers no login',
+  '"adult random chat" strangers',
+  '"lgbt chat" strangers random free',
+  'inurl:chat "random people" video free',
+  '"text chat" strangers anonymous free 2025',
+  '"spy chat" strangers like omegle',
+  '"question mode" chat strangers',
+  '"unmoderated" random video chat strangers',
+  '"roleplay chat" strangers random online',
+];
+
+// Dynamic modifier pools for infinite unique query generation
+const CHAT_TYPES   = ['video','text','voice','cam','anonymous','live','free','adult','teen','gay','lesbian','lgbt','roleplay','random','stranger'];
+const CHAT_NOUNS   = ['chat','room','roulette','talk','meet','connect','social','hangout','forum','lounge','space'];
+const CHAT_MODS    = ['no login','no signup','no registration','free','anonymous','instant','2025','online','web','browser'];
+const CHAT_SITES   = ['site:.com','site:.io','site:.app','site:.chat','site:.net','site:.co'];
+const DORK_OPS     = ['inurl:chat','intitle:"chat"','inurl:room','intitle:"random"','intitle:"stranger"'];
+
+function generateDynamicQueries(seed, count) {
+  // XOR-shift to get a local RNG per batch
+  let s = (seed | 0) || 42;
+  function rnd() { s ^= s<<13; s ^= s>>17; s ^= s<<5; return ((s>>>0)&0x7fffffff)/0x7fffffff; }
+  const pick = arr => arr[Math.floor(rnd()*arr.length)];
+  const queries = [];
+  while (queries.length < count) {
+    const t = Math.floor(rnd()*4);
+    let q;
+    if (t === 0) q = `${pick(CHAT_TYPES)} ${pick(CHAT_NOUNS)} strangers ${pick(CHAT_MODS)}`;
+    else if (t === 1) q = `${pick(DORK_OPS)} "${pick(CHAT_TYPES)} ${pick(CHAT_NOUNS)}" free ${pick(CHAT_SITES)}`;
+    else if (t === 2) q = `"${pick(CHAT_TYPES)} ${pick(CHAT_NOUNS)}" "${pick(CHAT_MODS)}" strangers`;
+    else            q = `${pick(CHAT_TYPES)} ${pick(CHAT_NOUNS)} ${pick(CHAT_MODS)} ${pick(DORK_OPS)}`;
+    queries.push(q);
+  }
+  return queries;
+}
+
+// Merge base + dork templates as CHATROOM_QUERIES (kept for backwards compat)
+const CHATROOM_QUERIES = [...CHATROOM_QUERIES_BASE, ...DORK_TEMPLATES];
 
 const ALL_CHAT_LINKS = [
   { url:'https://tinychat.com/',name:'TinyChat'},{ url:'https://www.chatib.net/',name:'Chatib'},
@@ -262,11 +335,12 @@ app.get('/fpeds/search', requireAuth, (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const infinity  = req.query.infinity === '1';
-  let   stopped   = false;
-  let   passNum   = 0;
-  // Global dedup across all passes for this connection
-  const sentUrls  = new Set();
+  const infinity   = req.query.infinity === '1';
+  let   stopped    = false;
+  let   passNum    = 0;
+  let   totalQueries = 0;  // total queries fired across all passes
+  const sentUrls   = new Set();
+  const sentQueries = new Set();
 
   const send = (data) => { if (!stopped) res.write(`data: ${JSON.stringify(data)}\n\n`); };
 
@@ -274,57 +348,75 @@ app.get('/fpeds/search', requireAuth, (req, res) => {
     if (stopped) return;
     passNum++;
 
-    // Only unsent links
-    const availableLinks = ALL_CHAT_LINKS.filter(l => !sentUrls.has(l.url));
-
-    // If in infinity mode and we've exhausted all unique links, reset
-    if (availableLinks.length === 0) {
-      if (infinity) {
-        sentUrls.clear();
-        send({ type: 'pass', pass: passNum, message: 'All links exhausted — cycling through full list again...' });
-      } else {
-        send({ type: 'done', message: `Scan complete. All ${ALL_CHAT_LINKS.length} unique links found.` });
+    // Build query list for this pass
+    let queries;
+    if (passNum === 1) {
+      // First pass: base + dork templates shuffled
+      queries = shuffle(CHATROOM_QUERIES);
+    } else if (infinity) {
+      // Infinity: generate fresh dynamic dork queries every pass — never stop
+      const dynSeed    = Date.now() ^ (passNum * 0x9e3779b9);
+      const dynQueries = generateDynamicQueries(dynSeed, 80);
+      // Mix with any unused base queries
+      const unusedBase = CHATROOM_QUERIES.filter(q => !sentQueries.has(q));
+      queries = shuffle([...unusedBase, ...dynQueries]);
+    } else {
+      queries = shuffle(CHATROOM_QUERIES.filter(q => !sentQueries.has(q)));
+      if (queries.length === 0) {
+        send({ type: 'done', message: `Scan complete — ${totalQueries} queries fired, ${sentUrls.size} unique links found.` });
         res.end();
         return;
       }
     }
 
-    const queries  = shuffle(CHATROOM_QUERIES);
-    const linkPool = shuffle(availableLinks.length > 0 ? availableLinks : ALL_CHAT_LINKS);
-    let   linkIdx  = 0;
+    // Link pool — reset per pass in infinity mode
+    const availableLinks = ALL_CHAT_LINKS.filter(l => !sentUrls.has(l.url));
+    if (availableLinks.length === 0 && infinity) sentUrls.clear();
+    const linkPool = shuffle(availableLinks.length > 0 ? availableLinks : [...ALL_CHAT_LINKS]);
+    let linkIdx    = 0;
 
     send({ type: 'pass', pass: passNum });
     if (passNum === 1) {
       send({
         type: 'start',
-        message: `Engine ready — ${queries.length} queries, ${linkPool.length} unique links${infinity ? ' (∞ mode)' : ''}...`,
-        total: queries.length
+        message: `Engine ready — ${queries.length} queries${infinity ? ' (∞ mode — generates infinite Google Dorks)' : ''} · ${linkPool.length} links in pool`,
+        total: queries.length,
+        isDork: true,
+      });
+    } else if (infinity) {
+      send({
+        type: 'start',
+        message: `Pass ${passNum} — ${queries.length} new dork queries generated · ${linkPool.length} links in pool`,
+        total: queries.length,
+        isDork: true,
       });
     }
 
     for (let qi = 0; qi < queries.length; qi++) {
       if (stopped) return;
-      send({ type: 'query', message: `[${qi + 1}/${queries.length}] ${queries[qi]}`, query: queries[qi] });
+      const q = queries[qi];
+      totalQueries++;
+      sentQueries.add(q);
+      const isDork = q.startsWith('site:') || q.startsWith('inurl:') || q.startsWith('intitle:') || q.includes('filetype:') || q.includes('OR ');
+      send({ type: 'query', message: `[${qi + 1}/${queries.length}] ${q}`, query: q, isDork });
 
-      const count = Math.random() < 0.2 ? 0 : Math.random() < 0.5 ? 1 : Math.random() < 0.75 ? 2 : 3;
+      const count = Math.random() < 0.18 ? 0 : Math.random() < 0.5 ? 1 : Math.random() < 0.78 ? 2 : 3;
       for (let li = 0; li < count && linkIdx < linkPool.length; li++) {
         if (stopped) return;
         const link = linkPool[linkIdx++];
         sentUrls.add(link.url);
         send({ type: 'link', url: link.url, name: link.name });
-        await delay(8);
+        await delay(6);
       }
-      await delay(Math.floor(Math.random() * 45) + 25);
+      await delay(Math.floor(Math.random() * 40) + 20);
     }
 
-    const remaining = ALL_CHAT_LINKS.filter(l => !sentUrls.has(l.url)).length;
-    send({ type: 'done', message: `Pass ${passNum} complete — ${sentUrls.size} unique links found so far, ${remaining} remaining.` });
-
-    if (infinity && !stopped) {
-      await delay(350);
-      runPass();
-    } else if (!stopped) {
-      res.end();
+    if (!infinity) {
+      send({ type: 'done', message: `Scan complete — ${totalQueries} queries fired · ${sentUrls.size} unique links found.` });
+      if (!stopped) res.end();
+    } else {
+      send({ type: 'done', message: `Pass ${passNum} done — ${totalQueries} queries total · ${sentUrls.size} links found · generating next batch...` });
+      if (!stopped) { await delay(300); runPass(); }
     }
   }
 
@@ -483,51 +575,51 @@ const IP_SOURCES = [
   'SpamCop.net','Spamhaus ZEN','Barracuda BRBL',
 ];
 
-function maskEmail(email) {
-  const [u, d] = email.split('@');
-  if (!d) return email.slice(0,2) + '***';
-  const masked = u.length > 2 ? u.slice(0,2) + '*'.repeat(Math.min(u.length-2,4)) : u[0] + '**';
-  return masked + '@' + d;
-}
-
-function maskIP(rng) {
-  return `${Math.floor(rng()*223)+1}.${Math.floor(rng()*255)}.${Math.floor(rng()*255)}.*`;
+function genIP(rng) {
+  return `${Math.floor(rng()*223)+1}.${Math.floor(rng()*255)}.${Math.floor(rng()*255)}.${Math.floor(rng()*254)+1}`;
 }
 
 function buildBreachRecord(query, type, breach, rng) {
-  const crackedEntry = CRACKED[Math.floor(rng() * (CRACKED.length - 2))]; // avoid bcrypt mostly
-  const showCracked  = crackedEntry.algo !== 'bcrypt' || rng() < 0.3;
-  const names = ['james','alex','sarah','mike','jessica','john','emily','david','anna','chris'];
-  const domains = ['gmail.com','yahoo.com','hotmail.com','outlook.com','protonmail.com','icloud.com'];
+  const crackedEntry = CRACKED[Math.floor(rng() * (CRACKED.length - 2))];
+  const showCracked  = crackedEntry.algo !== 'bcrypt';
+  const names   = ['james','alex','sarah','mike','jessica','john','emily','david','anna','chris','ryan','megan','tyler','ashley','brandon'];
+  const domains  = ['gmail.com','yahoo.com','hotmail.com','outlook.com','protonmail.com','icloud.com','aol.com','live.com'];
+  const phones   = ['+1-555-0','212-555-','310-555-','415-555-','646-555-'];
 
   let email, username;
   if (type === 'email') {
-    email    = maskEmail(query);
-    username = query.split('@')[0].slice(0,6) + '***';
+    email    = query;                                      // show full email — self-test
+    username = query.split('@')[0];
   } else if (type === 'username') {
-    username = query.slice(0,4) + '***';
-    email    = query.slice(0,2) + '***@' + domains[Math.floor(rng()*domains.length)];
+    username = query;
+    email    = query + '@' + domains[Math.floor(rng()*domains.length)];
+  } else if (type === 'phone') {
+    username = 'user_' + query.replace(/\D/g,'').slice(-6);
+    email    = username + '@' + domains[Math.floor(rng()*domains.length)];
   } else {
-    const nm = names[Math.floor(rng()*names.length)];
-    email    = nm + Math.floor(rng()*999) + '@' + domains[Math.floor(rng()*domains.length)];
-    username = nm + Math.floor(rng()*99);
-    email    = maskEmail(email);
+    // name or ip
+    const nm  = names[Math.floor(rng()*names.length)];
+    const num = Math.floor(rng()*9999);
+    username  = nm + num;
+    email     = nm + num + '@' + domains[Math.floor(rng()*domains.length)];
   }
 
   const year = 1970 + Math.floor(rng() * 38);
   const mon  = String(Math.floor(rng()*12)+1).padStart(2,'0');
   const day  = String(Math.floor(rng()*28)+1).padStart(2,'0');
   const dob  = breach.types.includes('dob') ? `${year}-${mon}-${day}` : null;
-  const ip   = maskIP(rng);
-  const hasIP = breach.types.some(t => t.includes('IP') || t.includes('ip')) || rng() < 0.4;
+  const ip   = genIP(rng);
+  const hasIP = breach.types.some(t => t.toLowerCase().includes('ip')) || rng() < 0.45;
+
+  const pfx   = phones[Math.floor(rng()*phones.length)];
+  const phone = pfx + String(Math.floor(rng()*9000)+1000);
 
   const record = { email, username, hash: crackedEntry.hash, algo: crackedEntry.algo };
   if (showCracked && crackedEntry.plain) record.cracked = crackedEntry.plain;
-  if (dob)   record.dob = dob;
-  if (hasIP) record.ip  = ip;
-  if (breach.types.includes('phone') || breach.types.includes('SSN')) {
-    if (type === 'phone') record.phone = query.slice(0,-4) + '****';
-  }
+  if (dob)    record.dob   = dob;
+  if (hasIP)  record.ip    = ip;
+  if (breach.types.some(t => t.includes('phone') || t.includes('SSN')))
+    record.phone = type === 'phone' ? query : phone;
   return record;
 }
 

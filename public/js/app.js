@@ -334,12 +334,13 @@
         passNum = d.pass;
         statPass.textContent = passNum;
         queryCount = 0;
-        if (passNum > 1) conLine(consoleOutput, `[${ts()}] ── Pass ${passNum} — cycling through new links ───────────`, 'c-dim');
+        if (passNum > 1) conLine(consoleOutput, `[${ts()}] ── Pass ${passNum} ─────────────────────────────────────`, 'c-dim');
       }
       if (d.type === 'query') {
         queryCount++;
         statQueries.textContent = `${queryCount}/${totalQ}`;
-        conLine(consoleOutput, `[${ts()}] ${escHtml(d.message)}`, 'c-query');
+        const tag = d.isDork ? `<span style="color:#7c3aed;margin-right:4px">[DORK]</span>` : '';
+        conLine(consoleOutput, `[${ts()}] ${tag}${escHtml(d.message)}`, d.isDork ? 'c-category' : 'c-query');
       }
       if (d.type === 'link') {
         conLine(consoleOutput, `[${ts()}]  ↳ <span style="color:var(--green)">${escHtml(d.url)}</span> <span class="c-dim">${escHtml(d.name)}</span>`, 'c-link');
@@ -655,6 +656,23 @@
         const card = buildBreachCard(d);
         osintFindList.appendChild(card);
         osintCountBadge.textContent = `${breachHits} breach${breachHits !== 1 ? 'es' : ''} found`;
+      }
+
+      if (d.type === 'ip_info') {
+        osintFindWrap.classList.remove('hidden');
+        osintFindings.push({ type:'ip_info', ...d });
+        const card = buildIPCard(d);
+        osintFindList.appendChild(card);
+        conLine(osintOutput, `[${ts()}]  🌐 IP INTEL → <span style="color:#60a5fa">${escHtml(d.ip)}</span> | ${escHtml(d.geo)} | Abuse: ${d.abuseScore}/100`, 'c-site-hit');
+        osintCountBadge.textContent = `${osintFindings.length} finding${osintFindings.length !== 1 ? 's' : ''}`;
+      }
+
+      if (d.type === 'ip_source') {
+        if (d.flagged) {
+          conLine(osintOutput, `[${ts()}]  🔴 ${escHtml(d.source)} → <span style="color:#ff4444">${escHtml(d.detail)}</span>`, 'c-site-hit');
+        } else {
+          conLine(osintOutput, `[${ts()}]  · ${escHtml(d.source)} — clean`, 'c-site-miss');
+        }
       }
 
       if (d.type === 'paste_hit') {
