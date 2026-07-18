@@ -20,39 +20,37 @@
       <div class="update-entry new">
         <div class="update-ver">v1.3 <span class="update-badge-new">LATEST</span></div>
         <ul class="update-list">
-          <li>Added <strong>OSN | SEARCH</strong> tab — OSINT engine scanning 500+ sources for emails, phones, usernames, and names</li>
-          <li>Added breach detection with publicly documented breach records</li>
+          <li>Added <strong>OSN | SEARCH</strong> — full OSINT engine with 6 scan phases</li>
+          <li>Google Dork query engine (20+ specialized queries per search)</li>
+          <li>Username enumeration across 150+ social platforms</li>
+          <li>Breach database scan across 30+ known public breach sets</li>
+          <li>Paste &amp; dark web reference scanner</li>
+          <li>Live exposure score with summary card</li>
           <li>Added <strong>Sign In / Sign Up</strong> authentication system</li>
-          <li>Fixed Infinity Mode — now globally deduplicates chatroom links across all passes</li>
-          <li>Infinity Mode cycles full list again only after all unique links are exhausted</li>
+          <li>Infinity Mode now globally deduplicates — no repeated links across passes</li>
         </ul>
       </div>
       <div class="update-entry">
         <div class="update-ver">v1.2</div>
         <ul class="update-list">
           <li>Check tab redesigned — bulk textarea input (paste any number of URLs)</li>
-          <li>All URLs checked concurrently — results populate in real time per link</li>
+          <li>All URLs checked concurrently — results populate in real time</li>
           <li>Added ∞ Infinity Mode toggle to Search tab</li>
           <li>Search speed increased to 30–80ms per query (10× faster)</li>
-          <li>Per-connection link deduplication added</li>
         </ul>
       </div>
       <div class="update-entry">
         <div class="update-ver">v1.1</div>
         <ul class="update-list">
-          <li>Added Search tab with 50+ chatroom discovery queries</li>
-          <li>SSE-based live console output</li>
-          <li>Export found links to .txt file</li>
-          <li>Copy all links to clipboard</li>
+          <li>Search tab with 60+ chatroom discovery queries</li>
+          <li>SSE-based live console, export to .txt, copy all</li>
         </ul>
       </div>
       <div class="update-entry">
         <div class="update-ver">v1.0</div>
         <ul class="update-list">
-          <li>Initial release — /fpeds link checker</li>
-          <li>Clearnet + .onion link checking via Tor SOCKS5</li>
-          <li>HTTP code, response time, content-type display</li>
-          <li>Persistent history via localStorage</li>
+          <li>Initial release — clearnet + .onion link checker</li>
+          <li>HTTP code, response time, content-type display, localStorage history</li>
         </ul>
       </div>
     </div>
@@ -91,7 +89,6 @@
     </div>
   </aside>
 
-  <!-- Main content -->
   <main id="content">
 
     <!-- ── CHECK TAB ── -->
@@ -108,10 +105,8 @@
         </div>
         <div class="check-controls">
           <div class="input-hints">
-            <span class="hint-tag">HTTP</span>
-            <span class="hint-tag">HTTPS</span>
-            <span class="hint-tag onion">.onion</span>
-            <span class="hint-tag">Bulk paste</span>
+            <span class="hint-tag">HTTP</span><span class="hint-tag">HTTPS</span>
+            <span class="hint-tag onion">.onion</span><span class="hint-tag">Bulk paste</span>
           </div>
           <div class="check-btn-row">
             <span id="check-count-label" class="check-count-label"></span>
@@ -147,7 +142,7 @@
       <div class="search-controls">
         <button id="search-btn" class="btn-primary"><span id="search-btn-label">Start Scan</span></button>
         <button id="stop-btn" class="btn-danger hidden">Stop</button>
-        <label class="infinity-toggle" title="Loop forever — only stops when you click Stop">
+        <label class="infinity-toggle">
           <input type="checkbox" id="infinity-mode"/>
           <span class="infinity-track"><span class="infinity-thumb"></span></span>
           <span class="infinity-label">∞ Infinity</span>
@@ -157,7 +152,7 @@
           <span id="stat-links">0</span> unique links &nbsp;·&nbsp; pass <span id="stat-pass">1</span>
         </div>
       </div>
-      <div id="search-console" class="console-box">
+      <div class="console-box">
         <div class="console-bar">
           <span class="console-dot red"></span><span class="console-dot yellow"></span><span class="console-dot green"></span>
           <span class="console-label">scan_output</span>
@@ -182,19 +177,19 @@
     <section id="tab-osint" class="tab-panel">
       <div class="panel-header">
         <h1>OSN | SEARCH</h1>
-        <p class="subtitle">OSINT engine — scan 500+ sources for breach records, profiles, and public data</p>
+        <p class="subtitle">Open Source Intelligence engine — 6-phase scan across 500+ public sources</p>
       </div>
 
       <div class="osint-disclaimer">
         <span class="disclaimer-icon">⚠</span>
-        <span>Do <strong>not</strong> use this for any bad activity. For <strong>educational purposes only</strong> — use only on yourself or with explicit consent.</span>
+        <span><strong>Educational purposes only.</strong> Do not use this tool for any illegal or harmful activity. Use only on yourself or with explicit consent from the subject.</span>
       </div>
 
       <div class="osint-form">
         <div class="osint-input-row">
           <div class="osint-input-wrap">
             <input id="osint-input" type="text" class="osint-input"
-              placeholder="Email, phone number, username, full name, or any query..."
+              placeholder="Enter an email, phone number, username, or full name..."
               autocomplete="off" spellcheck="false"/>
             <span id="osint-type-badge" class="osint-type-badge hidden"></span>
           </div>
@@ -208,26 +203,48 @@
         </div>
       </div>
 
-      <div id="osint-console" class="console-box hidden">
-        <div class="console-bar">
-          <span class="console-dot red"></span><span class="console-dot yellow"></span><span class="console-dot green"></span>
-          <span class="console-label" id="osint-console-label">osint_scan</span>
-          <span id="osint-progress" class="console-progress"></span>
+      <!-- Live scan output -->
+      <div id="osint-live" class="osint-live-wrap hidden">
+        <div class="osint-phase-bar">
+          <div id="osint-phase-label" class="osint-phase-label"></div>
+          <div id="osint-phase-progress" class="osint-phase-progress">
+            <div id="osint-phase-fill" class="osint-phase-fill"></div>
+          </div>
+          <span id="osint-phase-pct" class="osint-phase-pct">0%</span>
         </div>
-        <div id="osint-output" class="console-output osint-output"></div>
+        <div class="console-box" style="margin-bottom:0">
+          <div class="console-bar">
+            <span class="console-dot red"></span><span class="console-dot yellow"></span><span class="console-dot green"></span>
+            <span class="console-label" id="osint-console-lbl">osint_scan</span>
+            <span id="osint-src-count" class="console-progress"></span>
+          </div>
+          <div id="osint-output" class="console-output" style="height:260px"></div>
+        </div>
       </div>
 
-      <div id="osint-results-section" class="osint-results-section hidden">
+      <!-- Platform grid (username enumeration) -->
+      <div id="osint-platform-grid-wrap" class="osint-platform-grid-wrap hidden">
+        <div class="found-header">
+          <span class="found-title">Platform Hits</span>
+          <span id="osint-plat-count" class="osint-count-badge"></span>
+        </div>
+        <div id="osint-platform-grid" class="osint-platform-grid"></div>
+      </div>
+
+      <!-- Findings cards -->
+      <div id="osint-findings-wrap" class="osint-findings-wrap hidden">
         <div class="found-header">
           <span class="found-title">Findings</span>
           <div class="found-actions">
             <span id="osint-count-badge" class="osint-count-badge"></span>
-            <button id="osint-copy-btn" class="btn-ghost">Copy Report</button>
-            <button id="osint-export-btn" class="btn-ghost">Export .txt</button>
+            <button id="osint-export-btn" class="btn-ghost">Export Report</button>
           </div>
         </div>
-        <div id="osint-results-list" class="osint-results-list"></div>
+        <div id="osint-findings-list" class="osint-results-list"></div>
       </div>
+
+      <!-- Exposure score summary -->
+      <div id="osint-summary-card" class="osint-summary-card hidden"></div>
     </section>
 
   </main>

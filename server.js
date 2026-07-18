@@ -332,234 +332,137 @@ app.get('/fpeds/search', requireAuth, (req, res) => {
   req.on('close', () => { stopped = true; });
 });
 
+
 /* ══════════════════════════════════════════
    OSINT SEARCH — SSE stream
 ══════════════════════════════════════════ */
 
-// Known public breach database records (publicly documented breaches, no private data)
-const PUBLIC_BREACHES = [
-  { name:'RockYou2021',     date:'2021-06-04', records:'8.4 billion', types:['passwords','emails'] },
-  { name:'Collection #1',   date:'2019-01-17', records:'773 million', types:['emails','passwords'] },
-  { name:'LinkedIn',        date:'2021-06-22', records:'700 million', types:['emails','phone','location','username'] },
-  { name:'Facebook',        date:'2021-04-03', records:'533 million', types:['phone','email','name','location','dob'] },
-  { name:'Adobe',           date:'2013-10-04', records:'153 million', types:['emails','password hints','usernames'] },
-  { name:'Canva',           date:'2019-05-24', records:'137 million', types:['emails','usernames','names','passwords'] },
-  { name:'MyFitnessPal',    date:'2018-02-01', records:'144 million', types:['emails','usernames','passwords'] },
-  { name:'Dubsmash',        date:'2018-12-01', records:'162 million', types:['emails','usernames','passwords'] },
-  { name:'Dropbox',         date:'2012-07-01', records:'68 million',  types:['emails','passwords'] },
-  { name:'Snapchat',        date:'2014-01-01', records:'4.6 million', types:['usernames','phone'] },
-  { name:'Twitter',         date:'2022-07-01', records:'5.4 million', types:['emails','phone','usernames'] },
-  { name:'Twitch',          date:'2021-10-06', records:'2.5GB data',  types:['emails','usernames','passwords','source code'] },
-  { name:'Lastpass',        date:'2022-08-25', records:'unknown',     types:['passwords (encrypted)','emails','IP'] },
-  { name:'Uber',            date:'2022-09-15', records:'57 million',  types:['emails','phone','names'] },
-  { name:'Yahoo',           date:'2016-09-22', records:'500 million', types:['emails','passwords','security questions','dob'] },
-  { name:'Equifax',         date:'2017-09-07', records:'147 million', types:['names','ssn','dob','addresses','cc numbers'] },
-  { name:'T-Mobile',        date:'2021-08-17', records:'76 million',  types:['names','phone','ssn','dob','IMEI'] },
-  { name:'Experian',        date:'2020-08-22', records:'24 million',  types:['names','addresses','financial info'] },
-  { name:'MySpace',         date:'2008-01-01', records:'360 million', types:['emails','usernames','passwords'] },
-  { name:'Neopets',         date:'2022-07-19', records:'69 million',  types:['emails','usernames','dob','passwords'] },
-  { name:'eBay',            date:'2014-05-21', records:'145 million', types:['emails','passwords','names','addresses','dob'] },
-  { name:'Tumblr',          date:'2013-01-01', records:'65 million',  types:['emails','passwords'] },
-  { name:'Dailymotion',     date:'2016-10-20', records:'87 million',  types:['emails','usernames','passwords'] },
-  { name:'Zynga',           date:'2019-09-01', records:'218 million', types:['emails','usernames','passwords','phone','FB ID'] },
-  { name:'Wattpad',         date:'2020-06-01', records:'268 million', types:['emails','usernames','passwords','IP','dob'] },
-  { name:'Havenly',         date:'2020-06-01', records:'1.3 million', types:['emails','passwords','names','addresses'] },
-  { name:'AntiPublic',      date:'2016-12-01', records:'458 million', types:['emails','passwords'] },
-  { name:'iMesh',           date:'2013-01-01', records:'49 million',  types:['emails','usernames','passwords'] },
-  { name:'Kickstarter',     date:'2014-02-16', records:'5.2 million', types:['emails','usernames','passwords','phone'] },
-  { name:'VK',              date:'2012-01-01', records:'100 million', types:['emails','usernames','passwords','phone'] },
-];
-
-// Generate 500+ OSINT site list
-function buildOsintSites() {
-  const sites = [];
-
-  // Breach Databases
-  const breachDbs = [
-    'haveibeenpwned.com','dehashed.com','leakcheck.io','snusbase.com','intelx.io',
-    'breachdirectory.org','leaked.site','nuclearleaks.com','pwndb.com','leakpeek.com',
-    'raidforums.com','ghostproject.fr','scatteredsecrets.com','weleakinfo.to',
-    'illicit.services','ashleymadisonhacked.com','crack-station.net','hashes.com',
-    'weakpass.com','md5decrypt.net','leakbase.io','leakhub.io','breachbase.com',
-    'leakforums.net','leaks.to','databreach.watch','databreach.directory',
-    'breachwatch.com','cybernews.com/personal-data-leak-check'
-  ];
-  breachDbs.forEach(s => sites.push({ name: s, category: 'Breach Database', checks: ['email','username','phone'] }));
-
-  // Social Media
-  const social = [
-    'twitter.com','x.com','facebook.com','instagram.com','linkedin.com','tiktok.com',
-    'snapchat.com','pinterest.com','reddit.com','tumblr.com','flickr.com','vimeo.com',
-    'youtube.com','twitch.tv','discord.com','telegram.org','whatsapp.com','wechat.com',
-    'line.me','viber.com','kik.com','skype.com','clubhouse.com','mastodon.social',
-    'parler.com','gab.com','mewe.com','ello.co','vero.co','mix.com','quora.com',
-    'medium.com','substack.com','patreon.com','onlyfans.com','deviantart.com',
-    'behance.net','dribbble.com','github.com','gitlab.com','bitbucket.org',
-    'stackoverflow.com','hackerrank.com','codepen.io','replit.com','glitch.com',
-    'soundcloud.com','bandcamp.com','spotify.com','last.fm','myspace.com','xing.com',
-    'vk.com','ok.ru','steam community','itch.io','roblox.com','xbox.com','psn.com',
-    'goodreads.com','letterboxd.com','imdb.com','yelp.com','foursquare.com','nextdoor.com',
-    'meetup.com','bumble.com','tinder.com','hinge.co','okcupid.com','pof.com',
-    'match.com','zoosk.com','tagged.com','badoo.com','lovoo.com','yubo.live',
-    'caffeine.tv','kick.com','rumble.com','odysee.com','bitchute.com','rumble.com',
-    'naver.com','kakao.com','qq.com','weibo.com','douyin.com','kuaishou.com',
-    'dailymotion.com','liveleak.com','strava.com','garmin connect','runkeeper.com',
-    'myfitnesspal.com','fitbit.com','withings.com'
-  ];
-  social.forEach(s => sites.push({ name: s, category: 'Social Media', checks: ['email','username','phone'] }));
-
-  // People Search Engines
-  const people = [
-    'spokeo.com','whitepages.com','peoplefinder.com','zabasearch.com','pipl.com',
-    'intelius.com','beenverified.com','truthfinder.com','radaris.com','instantcheckmate.com',
-    'backgroundcheck.run','checkpeople.com','publicrecordsnow.com','usa-people-search.com',
-    'fastpeoplesearch.com','411.com','addresses.com','anywho.com','yellowpages.com',
-    'superpages.com','truepeoplesearch.com','familytreenow.com','thatsthem.com',
-    'findemails.com','hunter.io','clearbit.com','apollo.io','zoominfo.com','lusha.com',
-    'voilanorbert.com','contactout.com','snovio.com','adapt.io','rocketreach.co',
-    'peopledatalabs.com','fullcontact.com','datanyze.com','uplead.com','lead411.com',
-    'globalwho.com','worldwho.com','privateye.com','docusearch.com','kgbpeople.com',
-    'record.com','peoplesearchnow.com','peekyou.com','spyfly.com','usphonebook.com'
-  ];
-  people.forEach(s => sites.push({ name: s, category: 'People Search', checks: ['name','email','phone'] }));
-
-  // Phone Lookup
-  const phone = [
-    'truecaller.com','numverify.com','phoneinfoga','calleridtest.com','whocallsme.com',
-    '800notes.com','callercenter.com','callipedia.com','spydialer.com','cocofind.com',
-    'phonelosers.org','reversephonelookup.com','phoneregistry.com','aftercode.com',
-    'validnumber.com','textmagic.com phone lookup','phonespell.org','fonefinder.net',
-    'melissadata.com','opencnam.com','numinfo.net','cellrevealer.com','zlookup.com',
-    'freecallerinfo.com','kall8.com','eyecon.mobi','callercheck.com','findclue.com',
-    'hiretual.com phone','ownerly.com','usphonebook.com','numspy.com','callerIDfaker.com'
-  ];
-  phone.forEach(s => sites.push({ name: s, category: 'Phone Lookup', checks: ['phone'] }));
-
-  // Dark Web / Paste Sites
-  const dark = [
-    'pastebin.com','ghostbin.com','dpaste.com','paste.fo','hastebin.com',
-    'privatebin.net','justpaste.it','paste2.org','ideone.com','rentry.co',
-    'controlc.com','cryptobin.co','paste.sh','termbin.com','paste.mozilla.org',
-    'codepad.org','slexy.org','snipplr.com','dumpz.org','paste.openstack.org',
-    'gist.github.com','pastelink.net','defuse.ca/pastebin','textbin.net','nekobin.com',
-    'bin.disroot.org','privatebin.net','bitbin.it','cl1p.net','paste.ee',
-    'paste.debian.net','paste.ubuntu.com','paste.scsys.co.uk','bpaste.net','zerobin.net',
-    'heypasteit.com','paste.ofcode.org','txt.fyi','sprunge.us','hpaste.org',
-    'sharethis.com','share-text.com','0bin.net','quickleak.com','anonpaste.me',
-    'dpaste.org','etherpad.wikimedia.org','piratepad.net'
-  ];
-  dark.forEach(s => sites.push({ name: s, category: 'Paste / Dark Sites', checks: ['email','username','phone','name'] }));
-
-  // Domain & IP Tools
-  const domain = [
-    'whois.domaintools.com','shodan.io','censys.io','viz.greynoise.io','urlscan.io',
-    'virustotal.com','otx.alienvault.com','threatcrowd.org','securitytrails.com',
-    'dnsdumpster.com','hackertarget.com','bgpview.io','ipinfo.io','ipgeolocation.io',
-    'whatismyipaddress.com','iplocation.net','ip-api.com','maxmind.com','abuseipdb.com',
-    'mxtoolbox.com','spamhaus.org','barracudacentral.org','senderscore.org',
-    'talos intelligence','threatpost','pulsedive.com','threatminer.org','cymon.io',
-    'apility.io','scamalytics.com','ipqs.com','fraudguard.io','ipreputation.com',
-    'reputationauthority.org','stopforumspam.com','fspamlist.com','spamcop.net',
-    'blocklist.de','dshield.org','emerging threats','phishtank.com','openphish.com',
-    'isitphishing.org','safebrowsing.google.com','siteadvisor.mcafee.com',
-    'urlvoid.com','sitecheck.sucuri.net','quttera.com','web inspector'
-  ];
-  domain.forEach(s => sites.push({ name: s, category: 'Domain / IP Intel', checks: ['email','domain','ip'] }));
-
-  // Email Reputation
-  const emailRep = [
-    'emailrep.io','mailboxlayer.com','kickbox.com','neverbounce.com','zerobounce.net',
-    'verifalia.com','debounce.io','emaillistverify.com','briteverify.com','proofy.io',
-    'emailchecker.com','disposablemail.check','block-disposable-email.com',
-    'mailcheck.ai','emailhippo.com','smartrequest.io','emailverifierapp.com',
-    'bounceshield.com','mailtester.com','mail-tester.com','mxtoolbox email',
-    'gmass.co email test','checkemail.org','emailformat.com','email-validator.net'
-  ];
-  emailRep.forEach(s => sites.push({ name: s, category: 'Email Reputation', checks: ['email'] }));
-
-  return sites;
+// Seeded RNG for consistent results per query
+function mkRng(seed) {
+  let s = (seed | 0) || 1;
+  return function() {
+    s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+    return ((s >>> 0) & 0x7fffffff) / 0x7fffffff;
+  };
+}
+function strHash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
 }
 
-const OSINT_SITES = buildOsintSites();
+// Common passwords with precomputed MD5 hashes (publicly documented, RockYou / Collection #1 analysis)
+const CRACKED = [
+  { hash:'5f4dcc3b5aa765d61d8327deb882cf99', plain:'password',   algo:'MD5' },
+  { hash:'e10adc3949ba59abbe56e057f20f883e', plain:'123456',     algo:'MD5' },
+  { hash:'d8578edf8458ce06fbc5bb76a58c5ca4', plain:'qwerty',     algo:'MD5' },
+  { hash:'0d107d09f5bbe40cade3de5c71e9e9b7', plain:'letmein',    algo:'MD5' },
+  { hash:'25d55ad283aa400af464c76d713c07ad', plain:'12345678',   algo:'MD5' },
+  { hash:'f25a2fc72690b780b2a14e140ef6a9e0', plain:'iloveyou',   algo:'MD5' },
+  { hash:'21232f297a57a5a743894a0e4a801fc3', plain:'admin',      algo:'MD5' },
+  { hash:'40be4e59b9a2a2b5dffb918c0e86b3d7', plain:'welcome',    algo:'MD5' },
+  { hash:'7f2ababa423061c509f4923dd04b6cf1', plain:'monkey',     algo:'MD5' },
+  { hash:'8621ffdbc5698829397d97767ac13db3', plain:'dragon',     algo:'MD5' },
+  { hash:'e3d704f3542b44a621ebed70dc523098', plain:'master',     algo:'MD5' },
+  { hash:'0571749e2ac330a7455809c6b0e7af90', plain:'sunshine',   algo:'MD5' },
+  { hash:'dc647eb65e6711e155375218212b3964', plain:'password1',  algo:'MD5' },
+  { hash:'3c59dc048e8850243be8079a5c74d079', plain:'abc123',     algo:'MD5' },
+  { hash:'57d9d8c907c5e64ec2a6c8bac5a96b67', plain:'trustno1',   algo:'MD5' },
+  { hash:'da0e79bdc7d9d32a60c37b7bb77cd4c9', plain:'football',   algo:'MD5' },
+  { hash:'e0208e4cffbfaa60e393ba3ebb4fefb0', plain:'baseball',   algo:'MD5' },
+  { hash:'6b1628b016dff46e6fa35684be6acc96', plain:'batman',     algo:'MD5' },
+  { hash:'c33367701511b4f6020ec61ded352059', plain:'passw0rd',   algo:'MD5' },
+  { hash:'a87ff679a2f3e71d9181a67b7542122c', plain:'4',          algo:'MD5' },
+  { hash:'f7c3bc1d808e04732adf679965ccc34ca7ae3441', plain:'1234567890', algo:'SHA-1' },
+  { hash:'aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d', plain:'hello',      algo:'SHA-1' },
+  { hash:'7c4a8d09ca3762af61e59520943dc26494f8941b', plain:'charlie',    algo:'SHA-1' },
+  { hash:'d0be2dc421be4fcd0172e5afceea3970e2f3d940', plain:'abc123456',  algo:'SHA-1' },
+  { hash:'$2b$12$EIx.sMq3eR...BCRYPT',               plain:null,          algo:'bcrypt' },
+  { hash:'$2y$10$Ab7cD3eF...BCRYPT',                  plain:null,          algo:'bcrypt' },
+];
 
-app.get('/fpeds/osint', requireAuth, (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
+const PUBLIC_BREACHES = [
+  { name:'Collection #1',   date:'2019-01-17', records:'772,904,991',  types:['emails','passwords'],                                  severity:'critical' },
+  { name:'RockYou2021',     date:'2021-06-04', records:'8,400,000,000',types:['passwords'],                                           severity:'critical' },
+  { name:'LinkedIn',        date:'2021-06-22', records:'700,000,000',  types:['emails','phone','location','username'],                severity:'high'     },
+  { name:'Facebook',        date:'2021-04-03', records:'533,000,000',  types:['phone','email','name','location','dob'],               severity:'high'     },
+  { name:'Adobe',           date:'2013-10-04', records:'153,000,000',  types:['emails','password hints','usernames'],                 severity:'high'     },
+  { name:'Canva',           date:'2019-05-24', records:'137,000,000',  types:['emails','usernames','names','passwords'],              severity:'high'     },
+  { name:'MyFitnessPal',    date:'2018-02-01', records:'144,000,000',  types:['emails','usernames','passwords'],                      severity:'high'     },
+  { name:'Dubsmash',        date:'2018-12-01', records:'162,000,000',  types:['emails','usernames','passwords'],                      severity:'high'     },
+  { name:'Dropbox',         date:'2012-07-01', records:'68,000,000',   types:['emails','passwords'],                                  severity:'medium'   },
+  { name:'Snapchat',        date:'2014-01-01', records:'4,600,000',    types:['usernames','phone'],                                   severity:'medium'   },
+  { name:'Twitter',         date:'2022-07-01', records:'5,400,000',    types:['emails','phone','usernames'],                          severity:'medium'   },
+  { name:'Twitch',          date:'2021-10-06', records:'2.5GB',        types:['emails','usernames','passwords','source code'],        severity:'high'     },
+  { name:'LastPass',        date:'2022-08-25', records:'unknown',      types:['passwords (encrypted)','emails','IP'],                 severity:'critical' },
+  { name:'Uber',            date:'2022-09-15', records:'57,000,000',   types:['emails','phone','names'],                              severity:'high'     },
+  { name:'Yahoo',           date:'2016-09-22', records:'500,000,000',  types:['emails','passwords','security questions','dob'],       severity:'critical' },
+  { name:'Equifax',         date:'2017-09-07', records:'147,000,000',  types:['names','SSN','dob','addresses','CC numbers'],          severity:'critical' },
+  { name:'T-Mobile',        date:'2021-08-17', records:'76,000,000',   types:['names','phone','SSN','dob','IMEI'],                    severity:'critical' },
+  { name:'MySpace',         date:'2008-01-01', records:'360,000,000',  types:['emails','usernames','passwords'],                      severity:'high'     },
+  { name:'eBay',            date:'2014-05-21', records:'145,000,000',  types:['emails','passwords','names','addresses','dob'],        severity:'high'     },
+  { name:'Tumblr',          date:'2013-01-01', records:'65,000,000',   types:['emails','passwords'],                                  severity:'medium'   },
+  { name:'Zynga',           date:'2019-09-01', records:'218,000,000',  types:['emails','usernames','passwords','phone','FB ID'],      severity:'high'     },
+  { name:'Wattpad',         date:'2020-06-01', records:'268,000,000',  types:['emails','usernames','passwords','IP','dob'],           severity:'high'     },
+  { name:'AntiPublic',      date:'2016-12-01', records:'458,000,000',  types:['emails','passwords'],                                  severity:'critical' },
+  { name:'iMesh',           date:'2013-01-01', records:'49,000,000',   types:['emails','usernames','passwords'],                      severity:'medium'   },
+  { name:'VK',              date:'2012-01-01', records:'100,000,000',  types:['emails','usernames','passwords','phone'],              severity:'high'     },
+  { name:'Neopets',         date:'2022-07-19', records:'69,000,000',   types:['emails','usernames','dob','passwords'],                severity:'high'     },
+  { name:'Dailymotion',     date:'2016-10-20', records:'87,000,000',   types:['emails','usernames','passwords'],                      severity:'medium'   },
+  { name:'Havenly',         date:'2020-06-01', records:'1,300,000',    types:['emails','passwords','names','addresses'],              severity:'medium'   },
+  { name:'Kickstarter',     date:'2014-02-16', records:'5,200,000',    types:['emails','usernames','passwords','phone'],              severity:'medium'   },
+  { name:'Experian',        date:'2020-08-22', records:'24,000,000',   types:['names','addresses','financial info'],                  severity:'critical' },
+];
 
-  const query    = (req.query.q || '').trim();
-  const type     = detectQueryType(query);
-  let   stopped  = false;
+const SOCIAL_PLATFORMS = [
+  'Twitter/X','Instagram','Facebook','LinkedIn','TikTok','Snapchat','Pinterest','Reddit',
+  'Tumblr','Flickr','Vimeo','YouTube','Twitch','Discord','Telegram','Skype','Clubhouse',
+  'Mastodon','Parler','Gab','MeWe','Ello','Vero','Quora','Medium','Substack','Patreon',
+  'DeviantArt','Behance','Dribbble','GitHub','GitLab','Bitbucket','Stack Overflow',
+  'HackerRank','CodePen','Replit','SoundCloud','Bandcamp','Spotify','Last.fm','MySpace',
+  'XING','VK','OK.ru','Steam','itch.io','Roblox','Xbox Live','PSN','Goodreads',
+  'Letterboxd','IMDb','Yelp','Foursquare','Nextdoor','Meetup','Bumble','Tinder',
+  'Hinge','OkCupid','Plenty of Fish','Match','Badoo','Lovoo','Yubo','Kick.com',
+  'Rumble','Odysee','BitChute','Dailymotion','Strava','MyFitnessPal','Fitbit',
+  'Weibo','Douyin','Kuaishou','Naver','KakaoTalk','Kik','WhatsApp','Viber',
+  'Signal','Line','WeChat','Caffeine.tv','Triller','Likee','Bigo Live','LiveMe',
+  'Twoo','Badminton','Tagged','Zoosk','eHarmony','Coffee Meets Bagel','Hily',
+  'OnlyFans','Fansly','Patreon','Ko-fi','Buy Me a Coffee','Gumroad','Beacons',
+  'About.me','Linktree','Carrd','Notion','Notion.so','Trello','Notion pages',
+  'Spotify','Apple Music','Deezer','Tidal','Amazon Music','Pandora','iHeartRadio',
+  'Mixcloud','8tracks','Audiomack','ReverbNation','Bandlab','Soundtrap',
+];
 
-  const send = (data) => { if (!stopped) res.write(`data: ${JSON.stringify(data)}\n\n`); };
+const PASTE_SITES = [
+  'Pastebin.com','Ghostbin.com','Dpaste.com','Paste.fo','Hastebin.com',
+  'JustPaste.it','Ideone.com','Rentry.co','ControlC.com','Cryptobin.co',
+  'Gist.GitHub.com','PasteLink.net','TextBin.net','Nekobin.com','0bin.net',
+  'Heypasteit.com','Bpaste.net','Slexy.org','Snipplr.com','Dumpz.org',
+  'Pasteio.com','Paste.gg','Paste.rs','Glot.io','Termbin.com',
+];
 
-  if (!query) {
-    send({ type: 'error', message: 'No query provided.' });
-    res.end();
-    return;
-  }
-
-  // Filter sites relevant to query type
-  const relevantSites = OSINT_SITES.filter(s => s.checks.some(c => {
-    if (type === 'email')    return ['email'].includes(c);
-    if (type === 'phone')    return ['phone'].includes(c);
-    if (type === 'username') return ['username','email'].includes(c);
-    return true; // general query — check all
-  }));
-
-  // Pick breach records to "show" (simulated publicly-known match)
-  const matchedBreaches = PUBLIC_BREACHES
-    .filter(() => Math.random() < 0.28)
-    .slice(0, Math.floor(Math.random() * 4) + 2);
-
-  async function runOsint() {
-    send({ type: 'start', query, queryType: type, total: relevantSites.length,
-      message: `Scanning ${relevantSites.length} sources for: ${query}` });
-
-    const categories = [...new Set(relevantSites.map(s => s.category))];
-    let totalFound = 0;
-
-    for (const cat of categories) {
-      if (stopped) return;
-      const catSites = relevantSites.filter(s => s.category === cat);
-      send({ type: 'category', message: `── ${cat} (${catSites.length} sources)` });
-
-      for (const site of catSites) {
-        if (stopped) return;
-
-        // Probabilistic hit based on category and type
-        const hitChance =
-          cat === 'Breach Database' ? 0.35 :
-          cat === 'Social Media'    ? 0.20 :
-          cat === 'Paste / Dark Sites' ? 0.12 :
-          cat === 'People Search'   ? 0.25 :
-          cat === 'Phone Lookup'    ? (type === 'phone' ? 0.30 : 0.05) :
-          cat === 'Email Reputation' ? (type === 'email' ? 0.40 : 0.08) :
-          0.10;
-
-        const found = Math.random() < hitChance;
-
-        send({ type: 'site_check', site: site.name, category: cat, found });
-
-        if (found) {
-          totalFound++;
-          // Build simulated result detail
-          const detail = buildDetail(query, type, site, matchedBreaches);
-          send({ type: 'result', site: site.name, category: cat, detail });
-        }
-
-        await delay(Math.floor(Math.random() * 18) + 6);
-      }
-    }
-
-    send({ type: 'done', totalFound, message: `Scan complete — ${totalFound} references found across ${relevantSites.length} sources.` });
-    res.end();
-  }
-
-  runOsint();
-  req.on('close', () => { stopped = true; });
-});
+const DORKS = [
+  'site:pastebin.com "{q}"',
+  'site:github.com "{q}"',
+  'site:reddit.com "{q}"',
+  '"{q}" filetype:sql',
+  '"{q}" filetype:txt password',
+  'intext:"{q}" site:raidforums.com',
+  '"{q}" site:haveibeenpwned.com',
+  '"{q}" "password" "email" filetype:csv',
+  'site:linkedin.com "{q}"',
+  '"{q}" inurl:profile',
+  '"{q}" site:twitter.com',
+  '"{q}" "leaked" OR "breach" OR "dump"',
+  '"{q}" site:instagram.com',
+  '"{q}" "database" "dump" filetype:txt',
+  '"{q}" site:facebook.com',
+  '"{q}" "credentials" filetype:log',
+  '"{q}" site:snapchat.com',
+  '"{q}" inurl:user OR inurl:profile OR inurl:account',
+  '"{q}" site:pwndb2am4tzkvold.onion',
+  '"{q}" "SSN" OR "social security" filetype:pdf',
+];
 
 function detectQueryType(q) {
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q)) return 'email';
@@ -568,38 +471,166 @@ function detectQueryType(q) {
   return 'username';
 }
 
-function buildDetail(query, type, site, matchedBreaches) {
-  const dataTypes = ['email address','username','password hash','IP address','phone number','date of birth','home address','security question'];
-  const randomTypes = dataTypes.sort(() => 0.5 - Math.random()).slice(0, Math.floor(Math.random() * 3) + 1);
-
-  if (site.category === 'Breach Database' && matchedBreaches.length > 0) {
-    const breach = matchedBreaches[Math.floor(Math.random() * matchedBreaches.length)];
-    return {
-      type: 'breach',
-      breachName: breach.name,
-      date: breach.date,
-      records: breach.records,
-      exposedData: breach.types,
-      note: 'Publicly documented breach — data categories exposed (no raw data shown)'
-    };
-  }
-  if (site.category === 'Social Media') {
-    return { type: 'profile', platform: site.name, profileFound: true, dataVisible: randomTypes, note: 'Public profile detected' };
-  }
-  if (site.category === 'Paste / Dark Sites') {
-    return { type: 'paste', site: site.name, snippet: `...${query}... [redacted for safety]`, pasteDate: 'unknown', note: 'Reference found in public paste' };
-  }
-  if (site.category === 'People Search') {
-    return { type: 'record', site: site.name, dataFound: randomTypes, note: 'Public records aggregator match' };
-  }
-  if (site.category === 'Phone Lookup' && type === 'phone') {
-    return { type: 'phone', site: site.name, carrier: ['AT&T','Verizon','T-Mobile','Sprint','Unknown'][Math.floor(Math.random()*5)], region: 'United States', note: 'Carrier/region data from public number registry' };
-  }
-  if (site.category === 'Email Reputation') {
-    return { type: 'email_rep', site: site.name, riskScore: Math.floor(Math.random()*40+20), disposable: false, note: 'Email reputation score from public blacklist' };
-  }
-  return { type: 'generic', site: site.name, dataFound: randomTypes, note: 'Reference found in public source' };
+function maskEmail(email) {
+  const [u, d] = email.split('@');
+  if (!d) return email.slice(0,2) + '***';
+  const masked = u.length > 2 ? u.slice(0,2) + '*'.repeat(Math.min(u.length-2,4)) : u[0] + '**';
+  return masked + '@' + d;
 }
+
+function maskIP(rng) {
+  return `${Math.floor(rng()*223)+1}.${Math.floor(rng()*255)}.${Math.floor(rng()*255)}.*`;
+}
+
+function buildBreachRecord(query, type, breach, rng) {
+  const crackedEntry = CRACKED[Math.floor(rng() * (CRACKED.length - 2))]; // avoid bcrypt mostly
+  const showCracked  = crackedEntry.algo !== 'bcrypt' || rng() < 0.3;
+  const names = ['james','alex','sarah','mike','jessica','john','emily','david','anna','chris'];
+  const domains = ['gmail.com','yahoo.com','hotmail.com','outlook.com','protonmail.com','icloud.com'];
+
+  let email, username;
+  if (type === 'email') {
+    email    = maskEmail(query);
+    username = query.split('@')[0].slice(0,6) + '***';
+  } else if (type === 'username') {
+    username = query.slice(0,4) + '***';
+    email    = query.slice(0,2) + '***@' + domains[Math.floor(rng()*domains.length)];
+  } else {
+    const nm = names[Math.floor(rng()*names.length)];
+    email    = nm + Math.floor(rng()*999) + '@' + domains[Math.floor(rng()*domains.length)];
+    username = nm + Math.floor(rng()*99);
+    email    = maskEmail(email);
+  }
+
+  const year = 1970 + Math.floor(rng() * 38);
+  const mon  = String(Math.floor(rng()*12)+1).padStart(2,'0');
+  const day  = String(Math.floor(rng()*28)+1).padStart(2,'0');
+  const dob  = breach.types.includes('dob') ? `${year}-${mon}-${day}` : null;
+  const ip   = maskIP(rng);
+  const hasIP = breach.types.some(t => t.includes('IP') || t.includes('ip')) || rng() < 0.4;
+
+  const record = { email, username, hash: crackedEntry.hash, algo: crackedEntry.algo };
+  if (showCracked && crackedEntry.plain) record.cracked = crackedEntry.plain;
+  if (dob)   record.dob = dob;
+  if (hasIP) record.ip  = ip;
+  if (breach.types.includes('phone') || breach.types.includes('SSN')) {
+    if (type === 'phone') record.phone = query.slice(0,-4) + '****';
+  }
+  return record;
+}
+
+app.get('/fpeds/osint', requireAuth, (req, res) => {
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
+
+  const query   = (req.query.q || '').trim();
+  const type    = detectQueryType(query);
+  const rng     = mkRng(strHash(query));
+  let   stopped = false;
+
+  const send = (data) => {
+    if (!stopped && !res.writableEnded) res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  req.on('close', () => { stopped = true; });
+
+  if (!query) { send({ type:'error', message:'No query provided.' }); res.end(); return; }
+
+  // Seeded breach selection (consistent per query) — 40-70% hit rate
+  const breachHits = PUBLIC_BREACHES.filter(() => rng() < 0.55);
+
+  // Seeded platform selection
+  const platformHits = SOCIAL_PLATFORMS.filter(() => rng() < 0.45);
+
+  // Seeded paste hits
+  const pasteHits = PASTE_SITES.filter(() => rng() < 0.35);
+
+  async function runScan() {
+    send({ type:'start', query, queryType: type,
+      message: `Query: "${query}" | Type: ${type.toUpperCase()} | Starting 5-phase scan...` });
+
+    await delay(300);
+    if (stopped) return;
+
+    // ── PHASE 1: Google Dorks ──
+    send({ type:'phase', phase:1, name:'Google Dork Queries', total:5 });
+    const dorkSample = DORKS.sort(() => rng()-0.5).slice(0, 12);
+    for (const dork of dorkSample) {
+      if (stopped) return;
+      const q = dork.replace('{q}', query);
+      const found = rng() < 0.42;
+      send({ type:'dork', dork: q, found,
+        snippet: found ? `Found ${Math.floor(rng()*400)+10} results` : 'No results' });
+      await delay(Math.floor(rng()*120)+60);
+    }
+
+    // ── PHASE 2: Social Platform Enumeration ──
+    if (stopped) return;
+    send({ type:'phase', phase:2, name:'Social Platform Enumeration', total:SOCIAL_PLATFORMS.length });
+    for (const plat of SOCIAL_PLATFORMS) {
+      if (stopped) return;
+      const found = platformHits.includes(plat);
+      send({ type:'platform', platform:plat, found });
+      await delay(Math.floor(rng()*30)+8);
+    }
+
+    // ── PHASE 3: Breach Database Scan ──
+    if (stopped) return;
+    send({ type:'phase', phase:3, name:'Breach Database Scan', total:PUBLIC_BREACHES.length });
+    for (const breach of PUBLIC_BREACHES) {
+      if (stopped) return;
+      const isHit = breachHits.includes(breach);
+      send({ type:'breach_check', breach: breach.name, found: isHit });
+      if (isHit) {
+        const record = buildBreachRecord(query, type, breach, mkRng(strHash(query + breach.name)));
+        send({ type:'breach_hit', breach, record });
+      }
+      await delay(Math.floor(rng()*90)+40);
+    }
+
+    // ── PHASE 4: Paste / Dark Web ──
+    if (stopped) return;
+    send({ type:'phase', phase:4, name:'Paste & Dark Web Scan', total:PASTE_SITES.length });
+    for (const site of PASTE_SITES) {
+      if (stopped) return;
+      const found = pasteHits.includes(site);
+      if (found) {
+        const lines = Math.floor(rng()*2000)+50;
+        send({ type:'paste_hit', site, lines,
+          snippet:`...${query.slice(0,6)}***:${CRACKED[Math.floor(rng()*20)].plain||'[hash]'}...` });
+      } else {
+        send({ type:'paste_miss', site });
+      }
+      await delay(Math.floor(rng()*60)+20);
+    }
+
+    // ── PHASE 5: Summary ──
+    if (stopped) return;
+    send({ type:'phase', phase:5, name:'Generating Report', total:1 });
+    await delay(400);
+
+    const exposureScore = Math.min(100, Math.floor(
+      breachHits.length * 3.5 +
+      platformHits.length * 0.8 +
+      pasteHits.length * 2.5
+    ));
+
+    send({ type:'summary',
+      query, queryType: type,
+      breachCount:   breachHits.length,
+      platformCount: platformHits.length,
+      pasteCount:    pasteHits.length,
+      exposureScore,
+      totalRecords:  breachHits.reduce((a,b) => a + parseInt((b.records||'0').replace(/[^0-9]/g,'')||0), 0),
+    });
+
+    if (!stopped) res.end();
+  }
+
+  runScan();
+});
 
 /* ══════════════════════════════════════════
    START

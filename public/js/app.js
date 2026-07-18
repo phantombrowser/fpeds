@@ -378,129 +378,151 @@
     a.click(); URL.revokeObjectURL(a.href);
   });
 
+
   /* ══════════════════════════════════════════
      OSN | SEARCH TAB (OSINT)
   ══════════════════════════════════════════ */
-  const osintInput        = document.getElementById('osint-input');
-  const osintTypeBadge    = document.getElementById('osint-type-badge');
-  const osintBtn          = document.getElementById('osint-btn');
-  const osintConsole      = document.getElementById('osint-console');
-  const osintOutput       = document.getElementById('osint-output');
-  const osintConsoleLabel = document.getElementById('osint-console-label');
-  const osintProgress     = document.getElementById('osint-progress');
-  const osintResultsSec   = document.getElementById('osint-results-section');
-  const osintResultsList  = document.getElementById('osint-results-list');
-  const osintCountBadge   = document.getElementById('osint-count-badge');
-  const osintCopyBtn      = document.getElementById('osint-copy-btn');
-  const osintExportBtn    = document.getElementById('osint-export-btn');
+  const osintInput      = document.getElementById('osint-input');
+  const osintTypeBadge  = document.getElementById('osint-type-badge');
+  const osintBtn        = document.getElementById('osint-btn');
+  const osintStopBtn    = document.getElementById('osint-stop-btn');
+  const osintLive       = document.getElementById('osint-live');
+  const osintPhaseLabel = document.getElementById('osint-phase-label');
+  const osintPhaseFill  = document.getElementById('osint-phase-fill');
+  const osintPhasePct   = document.getElementById('osint-phase-pct');
+  const osintConsoleLbl = document.getElementById('osint-console-lbl');
+  const osintSrcCount   = document.getElementById('osint-src-count');
+  const osintOutput     = document.getElementById('osint-output');
+  const osintPlatWrap   = document.getElementById('osint-platform-grid-wrap');
+  const osintPlatGrid   = document.getElementById('osint-platform-grid');
+  const osintPlatCount  = document.getElementById('osint-plat-count');
+  const osintFindWrap   = document.getElementById('osint-findings-wrap');
+  const osintCountBadge = document.getElementById('osint-count-badge');
+  const osintExportBtn  = document.getElementById('osint-export-btn');
+  const osintFindList   = document.getElementById('osint-findings-list');
+  const osintSummary    = document.getElementById('osint-summary-card');
 
-  let osintEvt     = null;
-  let osintRunning = false;
-  let osintFindings= [];
-  let osintChecked = 0;
-  let osintTotal   = 0;
+  let osintEvt      = null;
+  let osintRunning  = false;
+  let osintFindings = [];
+  let osintPhase    = 0;
+  const TOTAL_PHASES = 5;
 
+  // type badge
   function detectType(q) {
     if (!q) return null;
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q)) return 'EMAIL';
     if (/^[\+]?[\d\s\-\(\)]{7,15}$/.test(q))  return 'PHONE';
-    if (/\s/.test(q))                           return 'NAME';
+    if (/\s/.test(q))                             return 'NAME';
     return 'USERNAME';
   }
 
   osintInput.addEventListener('input', () => {
     const t = detectType(osintInput.value.trim());
-    if (t) {
-      osintTypeBadge.textContent = t;
-      osintTypeBadge.classList.remove('hidden');
-      osintInput.style.paddingRight = '80px';
-    } else {
-      osintTypeBadge.classList.add('hidden');
-      osintInput.style.paddingRight = '';
-    }
+    if (t) { osintTypeBadge.textContent = t; osintTypeBadge.classList.remove('hidden'); }
+    else   { osintTypeBadge.classList.add('hidden'); }
   });
 
-  function catClass(category) {
-    if (category.includes('Breach'))  return 'cat-breach';
-    if (category.includes('Social'))  return 'cat-social';
-    if (category.includes('Paste'))   return 'cat-paste';
-    if (category.includes('People'))  return 'cat-people';
-    if (category.includes('Phone'))   return 'cat-phone';
-    if (category.includes('Email'))   return 'cat-email';
-    if (category.includes('Domain'))  return 'cat-domain';
-    return 'cat-default';
+  function setPhase(phase, name) {
+    osintPhase = phase;
+    const pct  = Math.round((phase / TOTAL_PHASES) * 100);
+    osintPhaseLabel.textContent  = `Phase ${phase}/${TOTAL_PHASES}: ${name}`;
+    osintPhaseFill.style.width   = pct + '%';
+    osintPhasePct.textContent    = pct + '%';
   }
 
-  function buildResultCard(d) {
-    const item = document.createElement('div');
-    item.className = 'osint-result-item';
-    const cc = catClass(d.category);
-    const det = d.detail || {};
+  // ── Result card builder ──
+  function buildBreachCard(d) {
+    const b = d.breach;
+    const r = d.record;
+    const sev = { critical:'sev-critical', high:'sev-high', medium:'sev-medium' }[b.severity] || 'sev-medium';
+    const crackedHtml = r.cracked
+      ? `<div class="breach-row cracked-row">
+           <span class="bkey">🔓 Cracked PW</span>
+           <span class="bval cracked-pw">${escHtml(r.cracked)}</span>
+           <span class="never-reuse">⚠ NEVER USE AGAIN</span>
+         </div>`
+      : `<div class="breach-row">
+           <span class="bkey">🔒 Status</span>
+           <span class="bval dim-val">Hash not in public crack list (${escHtml(r.algo)})</span>
+         </div>`;
 
-    let bodyHtml = '';
-
-    if (det.type === 'breach') {
-      bodyHtml = `
-        <div class="ori-field"><span class="ori-key">Breach</span><span class="ori-val highlight">${escHtml(det.breachName)}</span></div>
-        <div class="ori-field"><span class="ori-key">Date</span><span class="ori-val">${escHtml(det.date)}</span></div>
-        <div class="ori-field"><span class="ori-key">Records</span><span class="ori-val">${escHtml(det.records)}</span></div>
-        <div class="ori-field"><span class="ori-key">Data exposed</span><span class="ori-val">
-          <div class="ori-exposed">${(det.exposedData||[]).map(t=>`<span class="ori-tag">${escHtml(t)}</span>`).join('')}</div>
-        </span></div>`;
-    } else if (det.type === 'profile') {
-      bodyHtml = `
-        <div class="ori-field"><span class="ori-key">Platform</span><span class="ori-val">${escHtml(det.platform)}</span></div>
-        <div class="ori-field"><span class="ori-key">Profile</span><span class="ori-val green-val">Found</span></div>
-        <div class="ori-field"><span class="ori-key">Visible data</span><span class="ori-val">
-          <div class="ori-exposed">${(det.dataVisible||[]).map(t=>`<span class="ori-tag">${escHtml(t)}</span>`).join('')}</div>
-        </span></div>`;
-    } else if (det.type === 'paste') {
-      bodyHtml = `
-        <div class="ori-field"><span class="ori-key">Site</span><span class="ori-val">${escHtml(det.site)}</span></div>
-        <div class="ori-field"><span class="ori-key">Snippet</span><span class="ori-val red-val">${escHtml(det.snippet)}</span></div>
-        <div class="ori-field"><span class="ori-key">Date</span><span class="ori-val">${escHtml(det.pasteDate)}</span></div>`;
-    } else if (det.type === 'phone') {
-      bodyHtml = `
-        <div class="ori-field"><span class="ori-key">Carrier</span><span class="ori-val">${escHtml(det.carrier)}</span></div>
-        <div class="ori-field"><span class="ori-key">Region</span><span class="ori-val">${escHtml(det.region)}</span></div>`;
-    } else if (det.type === 'email_rep') {
-      bodyHtml = `
-        <div class="ori-field"><span class="ori-key">Risk score</span><span class="ori-val highlight">${det.riskScore}/100</span></div>
-        <div class="ori-field"><span class="ori-key">Disposable</span><span class="ori-val">${det.disposable ? 'Yes' : 'No'}</span></div>`;
-    } else {
-      bodyHtml = (det.dataFound||[]).map(f=>`<span class="ori-tag">${escHtml(f)}</span>`).join(' ');
-      if (bodyHtml) bodyHtml = `<div class="ori-exposed">${bodyHtml}</div>`;
-    }
-
-    const note = det.note ? `<div class="ori-note">${escHtml(det.note)}</div>` : '';
-
-    item.innerHTML = `
-      <div class="ori-header">
-        <span class="ori-cat-tag ${cc}">${escHtml(d.category)}</span>
-        <span class="ori-site">${escHtml(d.site)}</span>
+    const card = document.createElement('div');
+    card.className = 'breach-card';
+    card.innerHTML = `
+      <div class="breach-card-header">
+        <span class="breach-name">${escHtml(b.name)}</span>
+        <span class="breach-sev ${sev}">${b.severity.toUpperCase()}</span>
+        <span class="breach-date">${escHtml(b.date)}</span>
+        <span class="breach-records">${escHtml(b.records)} records</span>
       </div>
-      <div class="ori-body">${bodyHtml}${note}</div>`;
-    return item;
+      <div class="breach-card-body">
+        <div class="breach-row"><span class="bkey">📧 Email</span><span class="bval">${escHtml(r.email)}</span></div>
+        <div class="breach-row"><span class="bkey">👤 Username</span><span class="bval">${escHtml(r.username)}</span></div>
+        <div class="breach-row"><span class="bkey">🔑 Hash (${escHtml(r.algo)})</span><span class="bval hash-val">${escHtml(r.hash)}</span></div>
+        ${crackedHtml}
+        ${r.dob ? `<div class="breach-row"><span class="bkey">📅 DOB</span><span class="bval">${escHtml(r.dob)}</span></div>` : ''}
+        ${r.ip  ? `<div class="breach-row"><span class="bkey">🌐 IP</span><span class="bval">${escHtml(r.ip)}</span></div>` : ''}
+        ${r.phone ? `<div class="breach-row"><span class="bkey">📱 Phone</span><span class="bval">${escHtml(r.phone)}</span></div>` : ''}
+        <div class="breach-row"><span class="bkey">📂 Exposed</span><span class="bval exposed-tags">${(b.types||[]).map(t=>`<span class="ori-tag">${escHtml(t)}</span>`).join('')}</span></div>
+      </div>`;
+    return card;
   }
 
+  function buildPasteCard(d) {
+    const card = document.createElement('div');
+    card.className = 'paste-card';
+    card.innerHTML = `
+      <div class="breach-card-header">
+        <span class="breach-name">📋 ${escHtml(d.site)}</span>
+        <span class="breach-sev sev-medium">PASTE</span>
+        <span class="breach-records">${escHtml(String(d.lines))} lines</span>
+      </div>
+      <div class="breach-card-body">
+        <div class="breach-row"><span class="bkey">Snippet</span><span class="bval hash-val">${escHtml(d.snippet)}</span></div>
+      </div>`;
+    return card;
+  }
+
+  // ── Platform grid pill ──
+  function addPlatformPill(name, found) {
+    const pill = document.createElement('span');
+    pill.className = 'plat-pill' + (found ? ' plat-hit' : ' plat-miss');
+    pill.textContent = name;
+    osintPlatGrid.appendChild(pill);
+  }
+
+  // ── Main scan ──
   function runOsint() {
     const query = osintInput.value.trim();
     if (!query || osintRunning) return;
 
+    // close previous
     if (osintEvt) { osintEvt.close(); osintEvt = null; }
 
-    osintRunning  = true;
+    osintRunning = true;
     osintFindings = [];
-    osintChecked  = 0;
-    osintTotal    = 0;
-    osintResultsList.innerHTML = '';
-    osintResultsSec.classList.add('hidden');
-    osintConsole.classList.remove('hidden');
-    osintOutput.innerHTML = '';
-    osintCountBadge.textContent = '';
 
-    osintBtn.disabled = true;
-    osintBtn.textContent = 'Scanning…';
+    // reset UI
+    osintLive.classList.remove('hidden');
+    osintOutput.innerHTML = '';
+    osintPlatGrid.innerHTML = '';
+    osintPlatWrap.classList.add('hidden');
+    osintFindList.innerHTML = '';
+    osintFindWrap.classList.add('hidden');
+    osintSummary.classList.add('hidden');
+    osintSummary.innerHTML = '';
+    osintCountBadge.textContent = '';
+    osintPlatCount.textContent = '';
+    setPhase(0, 'Initializing...');
+    osintSrcCount.textContent = '';
+    osintConsoleLbl.textContent = 'osint_scan';
+
+    osintBtn.classList.add('hidden');
+    osintStopBtn.classList.remove('hidden');
+
+    let platTotal = 0, platHits = 0;
+    let breachHits = 0, pasteHits = 0;
 
     osintEvt = new EventSource(`/fpeds/osint?q=${encodeURIComponent(query)}`);
 
@@ -508,95 +530,133 @@
       const d = JSON.parse(e.data);
 
       if (d.type === 'start') {
-        osintTotal = d.total || 0;
-        osintConsoleLabel.textContent = `osint — ${escHtml(d.queryType || 'query')}`;
+        osintConsoleLbl.textContent = `osint — ${escHtml(d.queryType)}`;
         conLine(osintOutput, `[${ts()}] ${escHtml(d.message)}`, 'c-init');
       }
 
-      if (d.type === 'category') {
-        conLine(osintOutput, `[${ts()}] ${escHtml(d.message)}`, 'c-category');
+      if (d.type === 'phase') {
+        setPhase(d.phase, d.name);
+        conLine(osintOutput, `[${ts()}] ── Phase ${d.phase}: ${escHtml(d.name)} ──`, 'c-category');
       }
 
-      if (d.type === 'site_check') {
-        osintChecked++;
-        osintProgress.textContent = `${osintChecked}/${osintTotal}`;
+      if (d.type === 'dork') {
         if (d.found) {
-          conLine(osintOutput, `[${ts()}]  ✓ <span style="color:var(--green)">${escHtml(d.site)}</span>`, 'c-site-hit');
+          conLine(osintOutput, `[${ts()}]  ✓ ${escHtml(d.dork)} → <span style="color:var(--green)">${escHtml(d.snippet)}</span>`, 'c-site-hit');
         } else {
-          conLine(osintOutput, `[${ts()}]  · ${escHtml(d.site)}`, 'c-site-miss');
+          conLine(osintOutput, `[${ts()}]  · ${escHtml(d.dork)}`, 'c-site-miss');
         }
       }
 
-      if (d.type === 'result') {
-        osintFindings.push(d);
-        osintResultsSec.classList.remove('hidden');
-        osintCountBadge.textContent = `${osintFindings.length} finding${osintFindings.length !== 1 ? 's' : ''}`;
-        const card = buildResultCard(d);
-        osintResultsList.appendChild(card);
+      if (d.type === 'platform') {
+        osintPlatWrap.classList.remove('hidden');
+        platTotal++;
+        if (d.found) platHits++;
+        addPlatformPill(d.platform, d.found);
+        osintPlatCount.textContent = `${platHits} / ${platTotal}`;
       }
 
-      if (d.type === 'done') {
-        conLine(osintOutput, `[${ts()}] ─────────────────────────────────────────`, 'c-dim');
-        conLine(osintOutput, `[${ts()}] ${escHtml(d.message)}`, 'c-done');
-        osintBtn.disabled = false;
-        osintBtn.textContent = 'Search';
+      if (d.type === 'breach_check') {
+        if (d.found) {
+          conLine(osintOutput, `[${ts()}]  🔴 BREACH HIT → <span style="color:#ff4444">${escHtml(d.breach)}</span>`, 'c-site-hit');
+        } else {
+          conLine(osintOutput, `[${ts()}]  · ${escHtml(d.breach)}`, 'c-site-miss');
+        }
+      }
+
+      if (d.type === 'breach_hit') {
+        breachHits++;
+        osintFindWrap.classList.remove('hidden');
+        osintFindings.push(d);
+        const card = buildBreachCard(d);
+        osintFindList.appendChild(card);
+        osintCountBadge.textContent = `${breachHits} breach${breachHits !== 1 ? 'es' : ''} found`;
+      }
+
+      if (d.type === 'paste_hit') {
+        pasteHits++;
+        osintFindWrap.classList.remove('hidden');
+        osintFindings.push({ type:'paste', ...d });
+        const card = buildPasteCard(d);
+        osintFindList.appendChild(card);
+        conLine(osintOutput, `[${ts()}]  📋 PASTE REF → <span style="color:#f59e0b">${escHtml(d.site)}</span>`, 'c-site-hit');
+      }
+
+      if (d.type === 'paste_miss') {
+        conLine(osintOutput, `[${ts()}]  · ${escHtml(d.site)}`, 'c-site-miss');
+      }
+
+      if (d.type === 'summary') {
+        const score = d.exposureScore;
+        const scoreColor = score >= 70 ? '#ff4444' : score >= 40 ? '#f59e0b' : '#22c55e';
+        const scoreLabel = score >= 70 ? 'HIGH EXPOSURE' : score >= 40 ? 'MODERATE' : 'LOW';
+        osintSummary.classList.remove('hidden');
+        osintSummary.innerHTML = `
+          <div class="summary-header">
+            <span class="summary-title">Scan Complete — Exposure Report</span>
+            <span class="summary-score" style="color:${scoreColor}">${score}/100 — ${scoreLabel}</span>
+          </div>
+          <div class="summary-grid">
+            <div class="sum-stat"><span class="sum-num" style="color:#ff4444">${d.breachCount}</span><span class="sum-lbl">Breach DBs</span></div>
+            <div class="sum-stat"><span class="sum-num" style="color:#60a5fa">${d.platformCount}</span><span class="sum-lbl">Platforms</span></div>
+            <div class="sum-stat"><span class="sum-num" style="color:#f59e0b">${d.pasteCount}</span><span class="sum-lbl">Paste Refs</span></div>
+          </div>
+          <div class="summary-note">⚠ Change any exposed passwords immediately. Enable 2FA on all accounts. Check <strong>haveibeenpwned.com</strong> for real-time breach verification.</div>`;
+        conLine(osintOutput, `[${ts()}] Scan complete. Score: ${score}/100`, 'c-done');
         osintRunning = false;
+        osintBtn.classList.remove('hidden');
+        osintStopBtn.classList.add('hidden');
       }
 
       if (d.type === 'error') {
         conLine(osintOutput, `[${ts()}] Error: ${escHtml(d.message)}`, 'c-err');
-        osintBtn.disabled = false;
-        osintBtn.textContent = 'Search';
-        osintRunning = false;
+        stopOsint();
       }
     };
 
     osintEvt.onerror = () => {
       if (osintRunning) {
-        osintRunning = false;
-        osintBtn.disabled = false;
-        osintBtn.textContent = 'Search';
-        conLine(osintOutput, `[${ts()}] Connection error.`, 'c-err');
+        conLine(osintOutput, `[${ts()}] Stream closed.`, 'c-err');
+        stopOsint();
       }
     };
   }
 
-  osintBtn.addEventListener('click', runOsint);
-  osintInput.addEventListener('keydown', e => { if (e.key === 'Enter') runOsint(); });
+  function stopOsint() {
+    osintRunning = false;
+    if (osintEvt) { osintEvt.close(); osintEvt = null; }
+    osintBtn.classList.remove('hidden');
+    osintStopBtn.classList.add('hidden');
+  }
 
-  osintCopyBtn.addEventListener('click', () => {
-    if (!osintFindings.length) return;
-    const lines = osintFindings.map(f => {
-      const d = f.detail || {};
-      const base = `[${f.category}] ${f.site}`;
-      if (d.type === 'breach') return `${base} — Breach: ${d.breachName} (${d.date}) — Exposed: ${(d.exposedData||[]).join(', ')}`;
-      if (d.type === 'profile') return `${base} — Profile found — Data: ${(d.dataVisible||[]).join(', ')}`;
-      if (d.type === 'paste') return `${base} — Paste reference found`;
-      if (d.type === 'phone') return `${base} — Carrier: ${d.carrier}, Region: ${d.region}`;
-      if (d.type === 'email_rep') return `${base} — Risk score: ${d.riskScore}/100`;
-      return `${base} — ${(d.dataFound||[]).join(', ')}`;
-    }).join('\n');
-    navigator.clipboard.writeText(lines).then(() => {
-      osintCopyBtn.textContent = 'Copied!';
-      setTimeout(() => { osintCopyBtn.textContent = 'Copy Report'; }, 1500);
-    }).catch(() => {});
+  osintBtn.addEventListener('click', runOsint);
+  osintStopBtn.addEventListener('click', () => {
+    stopOsint();
+    conLine(osintOutput, `[${ts()}] Scan stopped by user.`, 'c-err');
   });
+  osintInput.addEventListener('keydown', e => { if (e.key === 'Enter') runOsint(); });
 
   osintExportBtn.addEventListener('click', () => {
     if (!osintFindings.length) return;
     const q = osintInput.value.trim();
-    const header = `OSINT Report — Query: ${q}\nGenerated: ${new Date().toISOString()}\n${'─'.repeat(60)}\n\n`;
     const lines = osintFindings.map(f => {
-      const d = f.detail || {};
-      let line = `[${f.category}] ${f.site}\n`;
-      if (d.type === 'breach')   line += `  Breach: ${d.breachName} | Date: ${d.date} | Records: ${d.records}\n  Exposed: ${(d.exposedData||[]).join(', ')}\n`;
-      if (d.type === 'profile')  line += `  Profile found | Data: ${(d.dataVisible||[]).join(', ')}\n`;
-      if (d.type === 'paste')    line += `  Paste reference: ${d.site} (${d.pasteDate})\n`;
-      if (d.type === 'phone')    line += `  Carrier: ${d.carrier} | Region: ${d.region}\n`;
-      if (d.type === 'email_rep')line += `  Risk: ${d.riskScore}/100 | Disposable: ${d.disposable}\n`;
-      if (d.note) line += `  Note: ${d.note}\n`;
-      return line;
-    }).join('\n');
+      if (f.type === 'breach_hit') {
+        const b = f.breach, r = f.record;
+        return [
+          `[BREACH] ${b.name} | ${b.date} | ${b.records} records | Severity: ${b.severity}`,
+          `  Email:    ${r.email}`,
+          `  Username: ${r.username}`,
+          `  Hash:     ${r.hash} (${r.algo})`,
+          r.cracked ? `  Cracked:  ${r.cracked}  ← NEVER USE THIS PASSWORD` : '  Cracked:  [not in public crack list]',
+          r.dob   ? `  DOB:      ${r.dob}` : '',
+          r.ip    ? `  IP:       ${r.ip}` : '',
+          r.phone ? `  Phone:    ${r.phone}` : '',
+          `  Exposed:  ${(b.types||[]).join(', ')}`,
+        ].filter(Boolean).join('\n');
+      }
+      if (f.type === 'paste') return `[PASTE] ${f.site} | ${f.lines} lines\n  Snippet: ${f.snippet}`;
+      return '';
+    }).filter(Boolean).join('\n\n');
+    const header = `FPEDS OSINT Report\nQuery: ${q}\nGenerated: ${new Date().toISOString()}\n${'-'.repeat(60)}\n\n`;
     const blob = new Blob([header + lines], { type: 'text/plain' });
     const a = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(blob),
