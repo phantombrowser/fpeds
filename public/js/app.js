@@ -411,9 +411,10 @@
   // type badge
   function detectType(q) {
     if (!q) return null;
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(q))    return 'IP';
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q)) return 'EMAIL';
     if (/^[\+]?[\d\s\-\(\)]{7,15}$/.test(q))  return 'PHONE';
-    if (/\s/.test(q))                             return 'NAME';
+    if (/\s/.test(q))                           return 'NAME';
     return 'USERNAME';
   }
 
@@ -431,56 +432,140 @@
     osintPhasePct.textContent    = pct + '%';
   }
 
-  // ── Result card builder ──
+  // ── Result card builder — uses DOM methods to guarantee visible text ──
+  function row(key, val, extra) {
+    const d = document.createElement('div');
+    d.style.cssText = 'display:flex;align-items:flex-start;gap:12px;padding:5px 0;border-bottom:1px solid #222;color:#e0e0e0;font-size:12px;font-family:Courier New,monospace';
+    const k = document.createElement('span');
+    k.style.cssText = 'color:#888;min-width:130px;flex-shrink:0;font-size:11px';
+    k.textContent = key;
+    const v = document.createElement('span');
+    v.style.cssText = 'color:#e0e0e0;word-break:break-all;flex:1' + (extra||'');
+    v.textContent = val;
+    d.appendChild(k); d.appendChild(v);
+    return d;
+  }
+
   function buildBreachCard(d) {
     const b = d.breach;
     const r = d.record;
-    const sev = { critical:'sev-critical', high:'sev-high', medium:'sev-medium' }[b.severity] || 'sev-medium';
-    const crackedHtml = r.cracked
-      ? `<div class="breach-row cracked-row">
-           <span class="bkey">🔓 Cracked PW</span>
-           <span class="bval cracked-pw">${escHtml(r.cracked)}</span>
-           <span class="never-reuse">⚠ NEVER USE AGAIN</span>
-         </div>`
-      : `<div class="breach-row">
-           <span class="bkey">🔒 Status</span>
-           <span class="bval dim-val">Hash not in public crack list (${escHtml(r.algo)})</span>
-         </div>`;
+    const sevMap = { critical:['#3d0000','#7a0000','#ff4444'], high:['#3d1c00','#6b3200','#f97316'], medium:['#3d3000','#6b5200','#f59e0b'] };
+    const [sbg, sbd, stx] = sevMap[b.severity] || sevMap.medium;
 
     const card = document.createElement('div');
-    card.className = 'breach-card';
-    card.innerHTML = `
-      <div class="breach-card-header">
-        <span class="breach-name">${escHtml(b.name)}</span>
-        <span class="breach-sev ${sev}">${b.severity.toUpperCase()}</span>
-        <span class="breach-date">${escHtml(b.date)}</span>
-        <span class="breach-records">${escHtml(b.records)} records</span>
-      </div>
-      <div class="breach-card-body">
-        <div class="breach-row"><span class="bkey">📧 Email</span><span class="bval">${escHtml(r.email)}</span></div>
-        <div class="breach-row"><span class="bkey">👤 Username</span><span class="bval">${escHtml(r.username)}</span></div>
-        <div class="breach-row"><span class="bkey">🔑 Hash (${escHtml(r.algo)})</span><span class="bval hash-val">${escHtml(r.hash)}</span></div>
-        ${crackedHtml}
-        ${r.dob ? `<div class="breach-row"><span class="bkey">📅 DOB</span><span class="bval">${escHtml(r.dob)}</span></div>` : ''}
-        ${r.ip  ? `<div class="breach-row"><span class="bkey">🌐 IP</span><span class="bval">${escHtml(r.ip)}</span></div>` : ''}
-        ${r.phone ? `<div class="breach-row"><span class="bkey">📱 Phone</span><span class="bval">${escHtml(r.phone)}</span></div>` : ''}
-        <div class="breach-row"><span class="bkey">📂 Exposed</span><span class="bval exposed-tags">${(b.types||[]).map(t=>`<span class="ori-tag">${escHtml(t)}</span>`).join('')}</span></div>
-      </div>`;
+    card.style.cssText = 'background:#141414;border:1px solid #2a2a2a;border-radius:4px;overflow:hidden;margin-bottom:2px';
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;background:#1a1a1a;border-bottom:1px solid #2a2a2a;flex-wrap:wrap';
+    const nm = document.createElement('span');
+    nm.style.cssText = 'font-family:Courier New,monospace;font-size:13px;font-weight:700;color:#e0e0e0';
+    nm.textContent = b.name;
+    const sv = document.createElement('span');
+    sv.style.cssText = `background:${sbg};border:1px solid ${sbd};color:${stx};font-family:Courier New,monospace;font-size:10px;padding:2px 7px;border-radius:2px;font-weight:700;letter-spacing:.8px`;
+    sv.textContent = b.severity.toUpperCase();
+    const dt = document.createElement('span');
+    dt.style.cssText = 'font-family:Courier New,monospace;font-size:11px;color:#666';
+    dt.textContent = b.date;
+    const rc = document.createElement('span');
+    rc.style.cssText = 'font-family:Courier New,monospace;font-size:11px;color:#666;margin-left:auto';
+    rc.textContent = b.records + ' records';
+    hdr.append(nm, sv, dt, rc);
+
+    // Body
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:12px 16px;background:#141414';
+
+    body.appendChild(row('EMAIL', r.email));
+    body.appendChild(row('USERNAME', r.username));
+    body.appendChild(row('HASH (' + r.algo + ')', r.hash, ';color:#60a5fa;font-size:11px'));
+
+    if (r.cracked) {
+      const cr = document.createElement('div');
+      cr.style.cssText = 'display:flex;align-items:center;gap:12px;padding:7px 8px;background:#1a0000;border-radius:4px;margin:4px 0;border:1px solid #3d0000';
+      const ck = document.createElement('span');
+      ck.style.cssText = 'color:#888;min-width:130px;flex-shrink:0;font-size:11px;font-family:Courier New,monospace';
+      ck.textContent = 'CRACKED PASSWORD';
+      const cv = document.createElement('span');
+      cv.style.cssText = 'color:#ff4444;font-weight:700;font-size:15px;font-family:Courier New,monospace;letter-spacing:1px;flex:1';
+      cv.textContent = r.cracked;
+      const warn = document.createElement('span');
+      warn.style.cssText = 'background:#3d0000;border:1px solid #7a0000;color:#ff4444;font-size:10px;font-weight:700;padding:2px 7px;border-radius:2px;white-space:nowrap;font-family:Courier New,monospace';
+      warn.textContent = '⚠ NEVER USE AGAIN';
+      cr.append(ck, cv, warn);
+      body.appendChild(cr);
+    } else {
+      body.appendChild(row('HASH STATUS', 'Not in public crack list (' + r.algo + ')', ';color:#666'));
+    }
+
+    if (r.dob)   body.appendChild(row('DATE OF BIRTH', r.dob));
+    if (r.ip)    body.appendChild(row('IP ADDRESS', r.ip));
+    if (r.phone) body.appendChild(row('PHONE', r.phone));
+
+    // Exposed types
+    const expRow = document.createElement('div');
+    expRow.style.cssText = 'display:flex;align-items:flex-start;gap:12px;padding:5px 0;color:#e0e0e0;font-size:12px';
+    const expK = document.createElement('span');
+    expK.style.cssText = 'color:#888;min-width:130px;flex-shrink:0;font-size:11px;font-family:Courier New,monospace';
+    expK.textContent = 'EXPOSED DATA';
+    const expV = document.createElement('div');
+    expV.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;flex:1';
+    (b.types||[]).forEach(t => {
+      const tag = document.createElement('span');
+      tag.style.cssText = 'background:#222;border:1px solid #333;color:#aaa;font-size:10px;padding:2px 7px;border-radius:2px;font-family:Courier New,monospace';
+      tag.textContent = t;
+      expV.appendChild(tag);
+    });
+    expRow.append(expK, expV);
+    body.appendChild(expRow);
+
+    card.append(hdr, body);
+    return card;
+  }
+
+  function buildIPCard(d) {
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#141414;border:1px solid #1a3a5c;border-radius:4px;overflow:hidden;margin-bottom:2px';
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;background:#0d1a2a;border-bottom:1px solid #1a3a5c;flex-wrap:wrap';
+    const nm = document.createElement('span');
+    nm.style.cssText = 'font-family:Courier New,monospace;font-size:13px;font-weight:700;color:#60a5fa';
+    nm.textContent = 'IP INTEL: ' + d.ip;
+    const listed = document.createElement('span');
+    listed.style.cssText = d.listed
+      ? 'background:#3d0000;border:1px solid #7a0000;color:#ff4444;font-size:10px;padding:2px 7px;border-radius:2px;font-weight:700;font-family:Courier New,monospace'
+      : 'background:#0a2010;border:1px solid #1a5030;color:#4ade80;font-size:10px;padding:2px 7px;border-radius:2px;font-weight:700;font-family:Courier New,monospace';
+    listed.textContent = d.listed ? 'BLACKLISTED' : 'CLEAN';
+    hdr.append(nm, listed);
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:12px 16px;background:#141414';
+    body.appendChild(row('GEOLOCATION', d.geo));
+    body.appendChild(row('ISP / ASN', d.isp));
+    body.appendChild(row('ABUSE SCORE', d.abuseScore + '/100', d.abuseScore > 50 ? ';color:#ff4444;font-weight:700' : ';color:#4ade80'));
+    body.appendChild(row('OPEN PORTS', d.openPorts));
+    if (d.blacklists && d.blacklists.length) {
+      body.appendChild(row('BLACKLISTS', d.blacklists.join(', '), ';color:#f59e0b'));
+    }
+    card.append(hdr, body);
     return card;
   }
 
   function buildPasteCard(d) {
     const card = document.createElement('div');
-    card.className = 'paste-card';
-    card.innerHTML = `
-      <div class="breach-card-header">
-        <span class="breach-name">📋 ${escHtml(d.site)}</span>
-        <span class="breach-sev sev-medium">PASTE</span>
-        <span class="breach-records">${escHtml(String(d.lines))} lines</span>
-      </div>
-      <div class="breach-card-body">
-        <div class="breach-row"><span class="bkey">Snippet</span><span class="bval hash-val">${escHtml(d.snippet)}</span></div>
-      </div>`;
+    card.style.cssText = 'background:#141414;border:1px solid #3d1a00;border-radius:4px;overflow:hidden;margin-bottom:2px';
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;background:#1a0d00;border-bottom:1px solid #3d1a00;flex-wrap:wrap';
+    const nm = document.createElement('span');
+    nm.style.cssText = 'font-family:Courier New,monospace;font-size:13px;font-weight:700;color:#f59e0b';
+    nm.textContent = 'PASTE: ' + d.site;
+    const rc = document.createElement('span');
+    rc.style.cssText = 'font-family:Courier New,monospace;font-size:11px;color:#666;margin-left:auto';
+    rc.textContent = d.lines + ' lines';
+    hdr.append(nm, rc);
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:12px 16px;background:#141414';
+    body.appendChild(row('SNIPPET', d.snippet, ';color:#60a5fa'));
+    card.append(hdr, body);
     return card;
   }
 

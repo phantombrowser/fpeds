@@ -465,11 +465,23 @@ const DORKS = [
 ];
 
 function detectQueryType(q) {
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(q))    return 'ip';
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q)) return 'email';
   if (/^[\+]?[\d\s\-\(\)]{7,15}$/.test(q))  return 'phone';
   if (/\s/.test(q))                           return 'name';
   return 'username';
 }
+
+const IP_SOURCES = [
+  'Shodan.io','Censys.io','GreyNoise.io','AbuseIPDB.com','IPinfo.io',
+  'Whois.DomainTools.com','BGPView.io','IPGeolocation.io','MaxMind GeoIP',
+  'Spamhaus.org','Barracuda Reputation','TalosIntelligence.com',
+  'VirusTotal.com','URLScan.io','OTX AlienVault','ThreatCrowd.org',
+  'Pulsedive.com','ThreatMiner.org','IPQualityScore.com','FraudGuard.io',
+  'AbuseIPDB.com','StopForumSpam.com','Blocklist.de','DShield.org',
+  'EmergingThreats.net','MXToolbox IP Blacklist','SORBS DNSBL',
+  'SpamCop.net','Spamhaus ZEN','Barracuda BRBL',
+];
 
 function maskEmail(email) {
   const [u, d] = email.split('@');
@@ -538,14 +550,11 @@ app.get('/fpeds/osint', requireAuth, (req, res) => {
 
   if (!query) { send({ type:'error', message:'No query provided.' }); res.end(); return; }
 
-  // Seeded breach selection (consistent per query) — 40-70% hit rate
-  const breachHits = PUBLIC_BREACHES.filter(() => rng() < 0.55);
-
-  // Seeded platform selection
-  const platformHits = SOCIAL_PLATFORMS.filter(() => rng() < 0.45);
-
-  // Seeded paste hits
-  const pasteHits = PASTE_SITES.filter(() => rng() < 0.35);
+  // Seeded selections (consistent per query)
+  const breachHits   = type === 'ip' ? [] : PUBLIC_BREACHES.filter(() => rng() < 0.55);
+  const platformHits = type === 'ip' ? [] : SOCIAL_PLATFORMS.filter(() => rng() < 0.45);
+  const pasteHits    = PASTE_SITES.filter(() => rng() < (type === 'ip' ? 0.25 : 0.35));
+  const ipHits       = type === 'ip' ? IP_SOURCES.filter(() => rng() < 0.60) : [];
 
   async function runScan() {
     send({ type:'start', query, queryType: type,
@@ -555,75 +564,119 @@ app.get('/fpeds/osint', requireAuth, (req, res) => {
     if (stopped) return;
 
     // ── PHASE 1: Google Dorks ──
-    send({ type:'phase', phase:1, name:'Google Dork Queries', total:5 });
-    const dorkSample = DORKS.sort(() => rng()-0.5).slice(0, 12);
+    send({ type:'phase', phase:1, name:'Google Dork Queries' });
+    const ipDorks = [
+      `site:shodan.io "${query}"`, `site:censys.io "${query}"`,
+      `"${query}" site:pastebin.com`, `"${query}" intext:"ip address" filetype:log`,
+      `"${query}" "abuse" OR "spam" OR "malware"`, `"${query}" site:abuseipdb.com`,
+      `"${query}" "port scan" OR "brute force"`, `"${query}" "blacklist"`,
+    ];
+    const dorkSample = type === 'ip'
+      ? ipDorks
+      : DORKS.sort(() => rng()-0.5).slice(0, 12).map(d => d.replace('{q}', query));
     for (const dork of dorkSample) {
       if (stopped) return;
-      const q = dork.replace('{q}', query);
       const found = rng() < 0.42;
-      send({ type:'dork', dork: q, found,
+      send({ type:'dork', dork, found,
         snippet: found ? `Found ${Math.floor(rng()*400)+10} results` : 'No results' });
-      await delay(Math.floor(rng()*120)+60);
+      await delay(Math.floor(rng()*100)+50);
     }
 
-    // ── PHASE 2: Social Platform Enumeration ──
+    // ── PHASE 2: Platform / IP Source Scan ──
     if (stopped) return;
-    send({ type:'phase', phase:2, name:'Social Platform Enumeration', total:SOCIAL_PLATFORMS.length });
-    for (const plat of SOCIAL_PLATFORMS) {
-      if (stopped) return;
-      const found = platformHits.includes(plat);
-      send({ type:'platform', platform:plat, found });
-      await delay(Math.floor(rng()*30)+8);
+    if (type === 'ip') {
+      send({ type:'phase', phase:2, name:'IP Reputation & Threat Intel Scan' });
+      const geos = ['United States','Germany','Netherlands','Russia','China','France','UK','Singapore'];
+      const isps = ['AS7922 Comcast','AS15169 Google','AS16509 Amazon','AS14618 Amazon','AS209 CenturyLink','AS701 Verizon'];
+      const geo  = geos[Math.floor(rng()*geos.length)];
+      const isp  = isps[Math.floor(rng()*isps.length)];
+      const abuse= Math.floor(rng()*100);
+      const ports= [80,443,22,8080,3389,21,25,110].filter(() => rng()<0.4).join(', ') || '80, 443';
+      send({ type:'ip_info', ip: query, geo, isp, abuseScore: abuse,
+        openPorts: ports, listed: ipHits.length > 3,
+        blacklists: ipHits.slice(0, Math.floor(rng()*5)+1) });
+      for (const src of IP_SOURCES) {
+        if (stopped) return;
+        const hit = ipHits.includes(src);
+        send({ type:'ip_source', source: src, flagged: hit,
+          detail: hit ? `Listed — abuse score ${Math.floor(rng()*80)+10}` : 'Clean' });
+        await delay(Math.floor(rng()*50)+15);
+      }
+    } else {
+      send({ type:'phase', phase:2, name:'Social Platform Enumeration' });
+      for (const plat of SOCIAL_PLATFORMS) {
+        if (stopped) return;
+        send({ type:'platform', platform:plat, found: platformHits.includes(plat) });
+        await delay(Math.floor(rng()*25)+6);
+      }
     }
 
     // ── PHASE 3: Breach Database Scan ──
     if (stopped) return;
-    send({ type:'phase', phase:3, name:'Breach Database Scan', total:PUBLIC_BREACHES.length });
-    for (const breach of PUBLIC_BREACHES) {
-      if (stopped) return;
-      const isHit = breachHits.includes(breach);
-      send({ type:'breach_check', breach: breach.name, found: isHit });
-      if (isHit) {
-        const record = buildBreachRecord(query, type, breach, mkRng(strHash(query + breach.name)));
-        send({ type:'breach_hit', breach, record });
+    send({ type:'phase', phase:3, name:'Breach Database Scan' });
+    if (type === 'ip') {
+      // IP: lighter breach check
+      const ipBreaches = PUBLIC_BREACHES.slice(0, 8);
+      for (const breach of ipBreaches) {
+        if (stopped) return;
+        const isHit = rng() < 0.20;
+        send({ type:'breach_check', breach: breach.name, found: isHit });
+        if (isHit) {
+          const record = buildBreachRecord(query, 'username', breach, mkRng(strHash(query + breach.name)));
+          send({ type:'breach_hit', breach, record });
+        }
+        await delay(Math.floor(rng()*80)+30);
       }
-      await delay(Math.floor(rng()*90)+40);
+    } else {
+      for (const breach of PUBLIC_BREACHES) {
+        if (stopped) return;
+        const isHit = breachHits.includes(breach);
+        send({ type:'breach_check', breach: breach.name, found: isHit });
+        if (isHit) {
+          const record = buildBreachRecord(query, type, breach, mkRng(strHash(query + breach.name)));
+          send({ type:'breach_hit', breach, record });
+        }
+        await delay(Math.floor(rng()*80)+30);
+      }
     }
 
     // ── PHASE 4: Paste / Dark Web ──
     if (stopped) return;
-    send({ type:'phase', phase:4, name:'Paste & Dark Web Scan', total:PASTE_SITES.length });
+    send({ type:'phase', phase:4, name:'Paste & Dark Web Scan' });
     for (const site of PASTE_SITES) {
       if (stopped) return;
       const found = pasteHits.includes(site);
       if (found) {
         const lines = Math.floor(rng()*2000)+50;
+        const pw = CRACKED[Math.floor(rng()*20)].plain || '[hash]';
         send({ type:'paste_hit', site, lines,
-          snippet:`...${query.slice(0,6)}***:${CRACKED[Math.floor(rng()*20)].plain||'[hash]'}...` });
+          snippet: type === 'ip'
+            ? `...${query}:${Math.floor(rng()*65535)+1} [${pw}]...`
+            : `...${query.slice(0,6)}***:${pw}...` });
       } else {
         send({ type:'paste_miss', site });
       }
-      await delay(Math.floor(rng()*60)+20);
+      await delay(Math.floor(rng()*50)+15);
     }
 
     // ── PHASE 5: Summary ──
     if (stopped) return;
-    send({ type:'phase', phase:5, name:'Generating Report', total:1 });
-    await delay(400);
+    send({ type:'phase', phase:5, name:'Generating Report' });
+    await delay(300);
 
     const exposureScore = Math.min(100, Math.floor(
       breachHits.length * 3.5 +
       platformHits.length * 0.8 +
-      pasteHits.length * 2.5
+      pasteHits.length * 2.5 +
+      ipHits.length * 2.0
     ));
 
     send({ type:'summary',
       query, queryType: type,
       breachCount:   breachHits.length,
-      platformCount: platformHits.length,
+      platformCount: type === 'ip' ? ipHits.length : platformHits.length,
       pasteCount:    pasteHits.length,
       exposureScore,
-      totalRecords:  breachHits.reduce((a,b) => a + parseInt((b.records||'0').replace(/[^0-9]/g,'')||0), 0),
     });
 
     if (!stopped) res.end();
